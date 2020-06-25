@@ -1,1 +1,1 @@
-# GeDigital-k8s-workshop
+Ge Digital k8s workshop
