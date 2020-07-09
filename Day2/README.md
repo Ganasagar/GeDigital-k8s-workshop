@@ -19,8 +19,6 @@ During this training, you'll learn how to deploy Konvoy and to use its main feat
 
 You need either a Linux, MacOS or a Windows laptop.
 
-
-
 ## Jumpserver
 
 Jumpservers have been deployed for each student with all prerequisites installed. First, go to the student data spreadsheet and select a host by entering your name.  Then, download the ssh-private-key (id_rsa_student#) and change the file permissions.  Finally, ssh to the ipaddress of your assigned jumpserver using the -i option to specify the identity file to be used.  The username for the Jumpserver is "centos".
@@ -445,222 +443,166 @@ kubectl delete svc nginx
 
 
 
-## 4. Portworx
+## 4. Role Based Access Control (RBAC)
 #### Leverage persistent storage using Portworx
 
-Portworx is a Software Defined Software that can use the local storage of the DC/OS nodes to provide High Available persistent storage to both Kubernetes pods and DC/OS services.
-
-### Objectives
-- Deploy Portworx on your Kubernetes cluster to leverage persistent storage using a kubernetes StorageClass
-- Create a PersistentVolumeClaim (pvc) to use volumes created in Portworx
-- Create a Pod service that will consume this pvc, write data to the persistent volume, and delete the Pod
-- Create a second Pod service that will consume the same pvc and validate that data persisted
-
-### Why is this Important?
-In recent years, containerization has become a popular way to bundle applications in a way that can be created and destroyed as often as needed. However, initially the containerization space did not support persistent storage, meaning that the data created within a container would disappear when the app finished its work and the container was destroyed. For many use-cases this is undesirable, and the industry has met the need by providing methods of retaining data created by storing them in persistent volumes. This allows for stateful applications such as databases to remain available even if a container goes down.
-
-Mesosphere provides multiple ways to achieving persistent storage for containerized applications. Portworx has been a partner of Mesosphere for many years and is a leading solution for container-based storage on the market. The Portworx solution is well integrated with Konvoy and the Kubernetes community.
-
-Set the following environment variables:
+1. Validate that you have admin access to k8s api-server:
 
 ```bash
-export CLUSTER=$(grep -m 1 tags.kubernetes.io/cluster state/terraform.tfstate | awk '{ print $2 }' | cut -d\" -f2)
-export REGION=us-west-2
+# Validate that you can run kubectl against the api-server.
+kubectl get pods -n kube-system
+
+# Check that you have admin access to the k8s cluster.
+kubectl config view
 ```
 
-Execute the following commands to create and attach an EBS volume to each Kubelet.
+2. Provision a service account for a an individual member ex john-smith
+```bash
+kubectl create serviceaccount john-sa
+```
+
+3. Bind the service account to the appropriate roles to grant privileges for actions you desire. In this case its view permissions
+```bash
+#Below command bind a default cluster-role with service account we created above and associate it with default namespace.
+kubectl create clusterrolebinding john-sa-binding --clusterrole=edit --serviceaccount=default:john-sa
+```
+#### Note
+A. Whenever we create a service account, K8s api server creates a token for this service account by default so that this Service account can authenticate itself to the api-server. We are going to extract this token to access the cluster for external access. 
+
+B. Above example uses default SA use this link to get creative and set up further custome roles as per your needs 
+https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+`
+
+4. Verify the secrets exist & Retrieve the token
+```bash
+kubectl get secrets
+```
+
+Output:
+```bash
+
+NAME                                  TYPE                                  DATA      AGE
+default-token-2s56x                   kubernetes.io/service-account-token   3         30d
+k8s-nginx-ingress-token-h49rc         kubernetes.io/service-account-token   3         21h
+john-sa-token-rq4ls                   kubernetes.io/service-account-token   3         12m
+```
+5. Verify the token generated for service account by describing the secret
+```bash
+kubect describe secret john-sa-token-rq4ls
+```
+Output:
 
 ```bash
-aws --region="$REGION" ec2 describe-instances |  jq --raw-output ".Reservations[].Instances[] | select((.Tags | length) > 0) | select(.Tags[].Value | test(\"$CLUSTER-worker\")) | select(.State.Name | test(\"running\")) | [.InstanceId, .Placement.AvailabilityZone] | \"\(.[0]) \(.[1])\"" | while read -r instance zone; do
-  echo "$instance" "$zone"
-  volume=$(aws --region="$REGION" ec2 create-volume --size=100  --availability-zone="$zone" --tag-specifications="ResourceType=volume,Tags=[{Key=string,Value=$CLUSTER}]" | jq --raw-output .VolumeId)
-  sleep 10
-  aws --region=$REGION ec2 attach-volume --device=/dev/xvdc --instance-id="$instance" --volume-id="$volume"
-done
+Name:         john-sa-token-rq4ls
+Namespace:    default
+Labels:       <none>
+Annotations:  kubernetes.io/service-account.name=john-sa
+              kubernetes.io/service-account.uid=aa1c318a-bc3d-11e8-b171-023b9d05d78
+      
+Type:  kubernetes.io/service-account-token
+      
+Data
+ ====
+ ca.crt:     33605 bytes
+ namespace:  7 bytes
+ token:      eyJhb3ciOi . . . [output snipped]
+```
+6. Add the token as an environmental variable(This would make reduce the hassale of copy pasting it over and over )
+```bash
+export TOKEN=$(kubectl get secret john-sa-token-rq4ls -o=jsonpath="{.data.token}" | base64 -d -i -)
 ```
 
-To be able to use Portworx persistent storage on your Kubernetes cluster, you need to download the Portworx specs using the following command:
+
+7. Configure your kubeconfig file to include the service account you included. Below is the sample and make to include the token you generate to the token section. Since we are working with the same cluster you might need to add only new user john and his context like below
 
 ```bash
-wget -O portworx.yaml "https://install.portworx.com/?mc=false&kbver=1.15.1&b=true&stork=true&lh=true&st=k8s&c=cluster1"
-```
-
-Then, you need to edit the `portworx.yaml` file to modify the type of the Kubernetes Service from `NodePort` to `LoadBalancer`:
-
-```
 apiVersion: v1
-kind: Service
-metadata:
-  name: px-lighthouse
-  namespace: kube-system
-  labels:
-    tier: px-web-console
-spec:
-  type: LoadBalancer
-  ports:
-    - name: http
-      port: 80
-      targetPort: 80
-    - name: https
-      port: 443
-      targetPort: https
-  selector:
-    tier: px-web-console
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://X.X.X.X:6443
+  name: kubernetes-cluster1
+contexts:
+- context:
+    cluster: kubernetes-cluster1
+    user: kubernetes-cluster1
+  name: kubernetes-cluster1
+- context:
+    cluster: kubernetes-cluster1
+    user: john-sa
+  name: john-sa
+current-context: kubernetes-cluster1
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-cluster1
+  user:
+    token:  XXXXXXXXXXXXXXX
+- name: john-sa
+  user:
+    token: XXXXXXXXXXXXXXXXXXXX
+
 ```
 
-Now, you can deploy Portworx using the command below:
-
+Another sample 
 ```bash
-kubectl apply -f portworx.yaml
-```
-
-Run the following command until all the pods are running:
-
-```bash
-kubectl -n kube-system get pods
-```
-
-You need to wait for a few minutes while the Load Balancer is created on AWS and the name resolution in place.
-
-```bash
-until nslookup $(kubectl -n kube-system get svc px-lighthouse --output jsonpath={.status.loadBalancer.ingress[*].hostname})
-do
-  sleep 5
-done
-echo "Open http://$(kubectl -n kube-system get svc px-lighthouse --output jsonpath={.status.loadBalancer.ingress[*].hostname}) to access the Portworx UI"
-```
-
-Access the Portworx UI using the URL indicated and login with the user `admin` and the password `Password1`.
-
-![Portworx UI](../images/portworx.png)
-
-Create the Kubernetes StorageClass using the following command:
-
-```bash
-cat <<EOF | kubectl create -f -
-kind: StorageClass
-apiVersion: storage.k8s.io/v1beta1
-metadata:
-   name: portworx-sc
-provisioner: kubernetes.io/portworx-volume
-parameters:
-  repl: "2"
-EOF
-```
-
-It will create volumes on Portworx with 2 replicas.
-
-Create the Kubernetes PersistentVolumeClaim using the following command:
-
-```bash
-cat <<EOF | kubectl create -f -
-kind: PersistentVolumeClaim
 apiVersion: v1
-metadata:
-  name: pvc001
-  annotations:
-    volume.beta.kubernetes.io/storage-class: portworx-sc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: portworx-sc
-  resources:
-    requests:
-      storage: 1Gi
-EOF
+clusters:
+- cluster:
+    certificate-authority: fake-ca-file
+    server: https://1.2.3.4
+  name: development
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://5.6.7.8
+  name: scratch
+contexts:
+- context:
+    cluster: development
+    namespace: frontend
+    user: developer
+  name: dev-frontend
+- context:
+    cluster: development
+    namespace: storage
+    user: developer
+  name: dev-storage
+- context:
+    cluster: scratch
+    namespace: default
+    user: experimenter
+  name: exp-scratch
+current-context: ""
+kind: Config
+preferences: {}
+users:
+- name: developer
+  user:
+    client-certificate: fake-cert-file
+    client-key: fake-key-file
+- name: experimenter
+  user:
+    password: some-password
+    username: exp
 ```
 
-Check the status of the PersistentVolumeClaim using the following command:
+8. Once you have updated the kubeconfig file. You can validate the access like below
+```bash
+
+kubectx john-sa
+```
+
+9. Run commands to validate that you can query the resources
 
 ```bash
-kubectl describe pvc pvc001
-Name:          pvc001
-Namespace:     default
-StorageClass:  portworx-sc
-Status:        Bound
-Volume:        pvc-a38e5d2c-7df9-11e9-b547-0ac418899022
-Labels:        <none>
-Annotations:   pv.kubernetes.io/bind-completed: yes
-               pv.kubernetes.io/bound-by-controller: yes
-               volume.beta.kubernetes.io/storage-class: portworx-sc
-               volume.beta.kubernetes.io/storage-provisioner: kubernetes.io/portworx-volume
-Finalizers:    [kubernetes.io/pvc-protection]
-Capacity:      1Gi
-Access Modes:  RWO
-VolumeMode:    Filesystem
-Events:
-  Type       Reason                 Age   From                         Message
-  ----       ------                 ----  ----                         -------
-  Normal     ProvisioningSucceeded  12s   persistentvolume-controller  Successfully provisioned volume pvc-a38e5d2c-7df9-11e9-b547-0ac418899022 using kubernetes.io/portworx-volume
-Mounted By:  <none>
+kubectl auth can-i get deployments
+
+kubectl get pods 
 ```
-
-Create a Kubernetes Pod that will use this PersistentVolumeClaim using the following command:
-
+7. You can also use the token to make http calls to k8s api
 ```bash
-cat <<EOF | kubectl create -f -
-apiVersion: v1
-kind: Pod
-metadata:
-  name: pvpod
-spec:
-  containers:
-  - name: test-container
-    image: alpine:latest
-    command: [ "/bin/sh" ]
-    args: [ "-c", "while true; do sleep 60;done" ]
-    volumeMounts:
-    - name: test-volume
-      mountPath: /test-portworx-volume
-  volumes:
-  - name: test-volume
-    persistentVolumeClaim:
-      claimName: pvc001
-EOF
+curl -H "Authorization: Bearer $TOKEN" https://api.cluster-address/api/v1/pods -k
 ```
-
-Create a file in the Volume using the following commands:
-
-```bash
-kubectl exec -i pvpod -- /bin/sh -c "echo 'May the force be with you' > /test-portworx-volume/test"
-```
-
-Delete the Pod using the following command:
-
-```bash
-kubectl delete pod pvpod
-```
-
-Create a Kubernetes Pod that will use the same PersistentVolumeClaim using the following command:
-
-```bash
-cat <<EOF | kubectl create -f -
-apiVersion: v1
-kind: Pod
-metadata:
-  name: pvpod
-spec:
-  containers:
-  - name: test-container
-    image: alpine:latest
-    command: [ "/bin/sh" ]
-    args: [ "-c", "while true; do sleep 60;done" ]
-    volumeMounts:
-    - name: test-volume
-      mountPath: /test-portworx-volume
-  volumes:
-  - name: test-volume
-    persistentVolumeClaim:
-      claimName: pvc001
-EOF
-```
-
-Validate that the file created in the previous Pod is still available:
-
-```bash
-kubectl exec -i pvpod cat /test-portworx-volume/test
-```
-
 
 
 
@@ -761,438 +703,124 @@ Delete the Jenkins Deployment using Helm
 helm delete jenkins --purge
 ```
 
-## 6. Deploy Apache Kafka using KUDO
-
-The Kubernetes Universal Declarative Operator (KUDO) is a highly productive toolkit for writing operators for Kubernetes. Using KUDO, you can deploy your applications, give your users the tools they need to operate it, and understand how it's behaving in their environments — all without a PhD in Kubernetes.
 
 
-Install the KUDO CLI (on Linux):
+## 5. Kubernetes logging/debugging
+
+In Konvoy, all the logs are stored in an Elasticsearch cluster and exposed through Kibana.
+
+To access the Kibana UI, click on the `Kibana Logs` icon on the Konvoy UI.
+
+![Kibana UI](../images/kibana.png)
+
+By default, it only shows the logs for the latest 15 minutes.
+
+Click on the top right corner and select `Last 24 hours`.
+
+Then, search for `redis`:
+
+![Kibana Redis](../images/kibana-redis.png)
+
+You'll see all the logs related to the redis Pod and Service you deployed previously.
+
+### 6. Ingress troubleshooting.
+
+In this section, we will leverage Konvoy logging to troubleshoot Ingress failure issue.
+
+We will deploy a nginx application and expose it via L7 loadbalancer. The application can be accessed with URLs follows below patten.
+
+`http[s]://$(kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}")/applications/nginx/`
+
+* 1st, let's deploy a nginx application and scale it to 3
 
 ```bash
-wget https://github.com/kudobuilder/kudo/releases/download/v0.8.0/kubectl-kudo_0.8.0_linux_x86_64
-sudo mv kubectl-kudo_0.8.0_linux_x86_64 /usr/local/bin/kubectl-kudo
-chmod +x /usr/local/bin/kubectl-kudo
+kubectl run --image=nginx --replicas=3 --port=80 --restart=Always nginx
 ```
-
-Run the following commands to deploy KUDO on your Kubernetes cluster:
+* 2nd, expose a in cluster service
 
 ```bash
-kubectl kudo init
+kubectl expose deploy nginx --port 8080 --target-port 80 --type NodePort --name "svc-nginx"
 ```
-
-The output should be similar to:
-```bash
-
-$KUDO_HOME has been configured at /home/centos/.kudo
-✅ installing crds
-✅ preparing service accounts and other requirements for controller to run
-✅ installing kudo controller
-```
-
-Check the status of the KUDO controller:
+* 3rd, create a ingress to expose service via Layer7 LB
 
 ```bash
-kubectl get pods -n kudo-system
-```
-
-The output should be similar to:
-```bash
-NAME                        READY   STATUS    RESTARTS   AGE
-kudo-controller-manager-0   1/1     Running   0          84s
-```
-
-Deploy ZooKeeper using KUDO:
-
-```bash
-kubectl kudo install zookeeper --instance=zk
-```
-
-The output should be similar to:
-```bash
-operator.kudo.dev/v1beta1/zookeeper created
-operatorversion.kudo.dev/v1beta1/zookeeper-0.2.0 created
-instance.kudo.dev/v1beta1/zk created
-```
-
-Check the status of the deployment:
-
-```bash
-kubectl kudo plan status --instance=zk
-```
-
-The output should be similar to:
-```bash
-Plan(s) for "zk" in namespace "default":
-.
-└── zk (Operator-Version: "zookeeper-0.2.0" Active-Plan: "deploy")
-    ├── Plan deploy (serial strategy) [COMPLETE]
-    │   ├── Phase zookeeper [COMPLETE]
-    │   │   └── Step deploy (COMPLETE)
-    │   └── Phase validation [COMPLETE]
-    │       ├── Step validation (COMPLETE)
-    │       └── Step cleanup (COMPLETE)
-    └── Plan validation (serial strategy) [NOT ACTIVE]
-        └── Phase connection (serial strategy) [NOT ACTIVE]
-            └── Step connection (serial strategy) [NOT ACTIVE]
-                ├── connection [NOT ACTIVE]
-                └── cleanup [NOT ACTIVE]
-```
-
-And check that the corresponding Pods are running:
-
-```bash
-kubectl get pods | grep zk
-```
-
-The output should be similar to:
-```bash
-zk-zookeeper-0                         1/1     Running   0          21m
-zk-zookeeper-1                         1/1     Running   0          21m
-zk-zookeeper-2                         1/1     Running   0          21m
-```
-Note: Pods are provisioned in a sequence one after the other
-
-Deploy Kafka 2.2.1 using KUDO (the version of the KUDO Kafka operator is 0.1.3):
-
-```bash
-kubectl kudo install kafka --instance=kafka -p ZOOKEEPER_URI=zk-zookeeper-0.zk-hs:2181,zk-zookeeper-1.zk-hs:2181,zk-zookeeper-2.zk-hs:2181 --version=0.1.3
-```
-
-Check the status of the deployment:
-
-```bash
-kubectl kudo plan status --instance=kafka
-```
-
-The output should be similar to:
-```bash
-Plan(s) for "kafka" in namespace "default":
-.
-└── kafka (Operator-Version: "kafka-0.1.3" Active-Plan: "deploy")
-    ├── Plan deploy (serial strategy) [COMPLETE]
-    │   └── Phase deploy-kafka [COMPLETE]
-    │       └── Step deploy (COMPLETE)
-    └── Plan not-allowed (serial strategy) [NOT ACTIVE]
-        └── Phase not-allowed (serial strategy) [NOT ACTIVE]
-            └── Step not-allowed (serial strategy) [NOT ACTIVE]
-                └── not-allowed [NOT ACTIVE]
-```
-
-And check that the corresponding Pods are running:
-
-```bash
-kubectl get pods | grep kafka
-```
-
-The output should be similar to:
-```bash
-kafka-kafka-0                          1/1     Running   0          39s
-kafka-kafka-1                          1/1     Running   0          58s
-kafka-kafka-2                          1/1     Running   0          118s
-```
-
-Produce messages in Kafka:
-
-```bash
-cat <<EOF | kubectl create -f -
-apiVersion: apps/v1beta1
-kind: Deployment
+cat << EOF | kubectl apply -f -
+apiVersion: extensions/v1beta1
+kind: Ingress
 metadata:
-  name: kudo-kafka-generator
+  name: nginx-root
+  namespace: default
 spec:
-  replicas: 1
-  template:
-    metadata:
-      name: kudo-kafka-generator
-      labels:
-        app: kudo-kafka-generator
-    spec:
-      containers:
-      - name: kudo-kafka-generator
-        image: mesosphere/flink-generator:0.1
-        command: ["/generator-linux"]
-        imagePullPolicy: Always
-        args: ["--broker", "kafka-kafka-0.kafka-svc:9092"]
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: svc-nginx
+          servicePort: 8080
+        path:  /applications/nginx/
 EOF
 ```
+* 4th, Now check Ingress configure in Traefik
 
-Consume messages from Kafka:
+![Traefik nginx](../images/trafik_nginx.png)
+
+The `Traefik dashboard` indicates the nginx application is ready to receive traffic but if you try access nginx with URL listed below, you will notice `404 Not Found` error like:
 
 ```bash
-cat <<EOF | kubectl create -f -
-apiVersion: apps/v1beta1
-kind: Deployment
+curl -k https://$(kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}")/applications/nginx/
+```
+
+Don't forget the trailing slash at the end of the URL. Otherwise, you won't generate a 404 error.
+
+If you would like to see the error in the browser, get the Loadbalancer's endpoint
+```bash
+kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}"
+```
+Output should give you the AWS-ELB endpoint use that in the browser like below:
+https://{endpoint}/applications/nginx/
+
+
+![Traefik nginx](../images/trafik_404.png)
+
+
+Let's troubleshoot this failure with Konvoy Kibana.
+
+![Kibana nginx](../images/kibana_nginx.png)
+
+With Konvoy Kibana's near real time log collection and indexing, we can easily identify the ingress traffic was eventually handled by a pod `kubernetes.pod_name:nginx-755464dd6c-dnvp9` in nginx service. The log also gave us more information on the failure, `"GET /applications/nginx/ HTTP/1.1" 404`, which tell us that nginx can't find resource at path `/applications/nginx/`.
+
+That is neat! Because w/o Kibana, you wouldn't know which Pod in our nginx service handles this request. (Our nginx deployment example launched 3 Pods to serve HTTP request) Not mention if there are multiple nginx service exists in the same K8s cluster but hosted at different namespace.
+
+To fix this failure requires some knownledge on Nginx configuration. In general, when nginx is launched with default configuration, it serves a virtual directory on its `ROOT` path `(/)`. When receives HTTP requests, the nginx walk through its virtual directory to return back resources to the client.
+
+In terms of out example, the `Ingress` configuration we submitted to k8s was configured to a path at `/applications/nginx/`. The `traefik` ingress controller sees this `Ingress configuration` and forwards any resource request at path `/applications/nginx/` to the down stream nginx service at the same path. The pod `kubernetes.pod_name:nginx-755464dd6c-dnvp9` received this request but nginx instance in this pod failed to locate any resource under path `/applications/nginx/`. That is the reason we saw this failure, `"GET /applications/nginx/ HTTP/1.1" 404`.  
+
+You can, of course, configure nginx instance to serve resources at path `/applications/nginx/`. But an alternative solution is leverage `traefik` to strip PATH `/applications/nginx/` to `ROOT (/)` before route requests to nginx.
+
+According to `Traefik` documentation [PathPrefixStrip](https://docs.traefik.io/configuration/backends/kubernetes/), the annotation `(traefik.ingress.kubernetes.io/rule-type)` is exactly what we need to direct traefik to strip ingress HOST PATH to ROOT PATH forementioned.
+
+To update `Ingress`, we can use below command.
+
+```bash
+cat << EOF | kubectl apply -f -
+apiVersion: extensions/v1beta1
+kind: Ingress
 metadata:
- name: kudo-kafka-consumer
+  annotations:
+    traefik.frontend.rule.type: PathPrefixStrip
+  name: nginx-root
+  namespace: default
 spec:
- replicas: 1
- template:
-   metadata:
-     name: kudo-kafka-consumer
-     labels:
-       app: kudo-kafka-consumer
-   spec:
-     containers:
-     - name: kudo-kafka-consumer
-       image: tbaums/kudo-kafka-demo
-       imagePullPolicy: Always
-       env:
-        - name: BROKER_SERVICE
-          value: kafka-kafka-0.kafka-svc:9092
+  rules:
+  - http:
+      paths:
+      - backend:
+          serviceName: svc-nginx
+          servicePort: 8080
+        path:  /applications/nginx/
 EOF
 ```
-
-Check the logs:
-
-```bash
-kubectl logs $(kubectl get pods -l app=kudo-kafka-consumer -o jsonpath='{.items[0].metadata.name}') --follow
-```
-
-The output should be similar to:
-```bash
-Message: b'2019-11-12T12:23:19Z;3;4;1071'
-Message: b'2019-11-12T12:23:21Z;4;3;3095'
-Message: b'2019-11-12T12:23:22Z;3;7;8639'
-Message: b'2019-11-12T12:23:27Z;9;4;7861'
-Message: b'2019-11-12T12:23:30Z;7;5;3594'
-Message: b'2019-11-12T12:23:33Z;5;0;9985'
-```
-
-KUDO is creating CRDs (new objects) in Kubernetes and you can get information about these objects like you can get informations about pods, deployments, ...
-
-Run this command to get the list of CRDs created by KUDO:
-
-```bash
-kubectl get crds | grep kudo
-```
-
-The output should be similar to:
-```bash
-instances.kudo.dev                               2019-11-12T12:16:19Z
-operators.kudo.dev                               2019-11-12T12:16:19Z
-operatorversions.kudo.dev                        2019-11-12T12:16:19Z
-```
-
-Now list the KUDO instances running using the following command:
-
-```bash
-kubectl get instances.kudo.dev
-```
-
-The output should be similar to:
-```bash
-NAME    AGE
-kafka   18m
-zk      33m
-```
-
-And get information about the KUDO Kafka instance:
-
-```bash
-kubectl get instances.kudo.dev kafka -o yaml
-```
-
-The output should be similar to:
-```bash
-apiVersion: kudo.dev/v1beta1
-kind: Instance
-metadata:
-  annotations:
-    kudo.dev/last-applied-instance-state: '{"operatorVersion":{"name":"kafka-0.1.3"},"parameters":{"ZOOKEEPER_URI":"zk-zookeeper-0.zk-hs:2181,zk-zookeeper-1.zk-hs:2181,zk-zookeeper-2.zk-hs:2181"}}'
-  creationTimestamp: "2019-11-12T12:46:39Z"
-  generation: 3
-  labels:
-    controller-tools.k8s.io: "1.0"
-    kudo.dev/operator: kafka
-  name: kafka
-  namespace: default
-  resourceVersion: "81847"
-  selfLink: /apis/kudo.dev/v1beta1/namespaces/default/instances/kafka
-  uid: 6f289e56-86e7-40d2-8360-f8255678a801
-spec:
-  operatorVersion:
-    name: kafka-0.1.3
-  parameters:
-    ZOOKEEPER_URI: zk-zookeeper-0.zk-hs:2181,zk-zookeeper-1.zk-hs:2181,zk-zookeeper-2.zk-hs:2181
-status:
-  aggregatedStatus:
-    status: COMPLETE
-  planStatus:
-    deploy:
-      lastFinishedRun: "2019-11-12T12:47:57Z"
-      name: deploy
-      phases:
-      - name: deploy-kafka
-        status: COMPLETE
-        steps:
-        - name: deploy
-          status: COMPLETE
-      status: COMPLETE
-      uid: e0ba11bf-d2d5-467b-b96c-c443aa0ba5ef
-    not-allowed:
-      lastFinishedRun: null
-      name: not-allowed
-      phases:
-      - name: not-allowed
-        status: NEVER_RUN
-        steps:
-        - name: not-allowed
-          status: NEVER_RUN
-      status: NEVER_RUN
-```
-
-This is also the approach you take to delete a running instance (`kubectl delete instances.kudo.dev kafka`), but you can keep it running.
-
-Upgrade your Kafka cluster to 2.3.0 (the version of the KUDO Kafka operator is 1.0.0) using the following command:
-
-```bash
-kubectl kudo upgrade kafka --version=1.0.0 --instance kafka
-```
-
-The output should be similar to:
-```bash
-instance./kafka updated
-```
-
-Check the status of the upgrade:
-
-```bash
-kubectl kudo plan status --instance=kafka
-```
-
-The output should be similar to:
-```bash
-Plan(s) for "kafka" in namespace "default":
-.
-└── kafka (Operator-Version: "kafka-1.0.0" Active-Plan: "deploy")
-    ├── Plan deploy (serial strategy) [COMPLETE]
-    │   └── Phase deploy-kafka [COMPLETE]
-    │       └── Step deploy (COMPLETE)
-    └── Plan not-allowed (serial strategy) [NOT ACTIVE]
-        └── Phase not-allowed (serial strategy) [NOT ACTIVE]
-            └── Step not-allowed (serial strategy) [NOT ACTIVE]
-                └── not-allowed [NOT ACTIVE]
-```
-
-And get information about the upgraded KUDO Kafka instance:
-
-```bash
-kubectl get instances.kudo.dev kafka -o yaml
-```
-
-The output should be similar to:
-```bash
-apiVersion: kudo.dev/v1beta1
-kind: Instance
-metadata:
-  annotations:
-    kudo.dev/last-applied-instance-state: '{"operatorVersion":{"name":"kafka-1.0.0"},"parameters":{"ZOOKEEPER_URI":"zk-zookeeper-0.zk-hs:2181,zk-zookeeper-1.zk-hs:2181,zk-zookeeper-2.zk-hs:2181"}}'
-  creationTimestamp: "2019-11-12T12:46:39Z"
-  generation: 6
-  labels:
-    controller-tools.k8s.io: "1.0"
-    kudo.dev/operator: kafka
-  name: kafka
-  namespace: default
-  resourceVersion: "82826"
-  selfLink: /apis/kudo.dev/v1beta1/namespaces/default/instances/kafka
-  uid: 6f289e56-86e7-40d2-8360-f8255678a801
-spec:
-  operatorVersion:
-    name: kafka-1.0.0
-  parameters:
-    ZOOKEEPER_URI: zk-zookeeper-0.zk-hs:2181,zk-zookeeper-1.zk-hs:2181,zk-zookeeper-2.zk-hs:2181
-status:
-  aggregatedStatus:
-    status: COMPLETE
-  planStatus:
-    deploy:
-      lastFinishedRun: "2019-11-12T12:51:03Z"
-      name: deploy
-      phases:
-      - name: deploy-kafka
-        status: COMPLETE
-        steps:
-        - name: deploy
-          status: COMPLETE
-      status: COMPLETE
-      uid: 6d4016db-71d2-42dc-a8b1-0a0473f84881
-    not-allowed:
-      lastFinishedRun: null
-      name: not-allowed
-      phases:
-      - name: not-allowed
-        status: NEVER_RUN
-        steps:
-        - name: not-allowed
-          status: NEVER_RUN
-      status: NEVER_RUN
-```
-
-And check that the corresponding Pods have been replaced:
-
-```bash
-kubectl get pods | grep kafka
-```
-
-The output should be similar to:
-```bash
-kafka-kafka-0                          1/1     Running   0          77s
-kafka-kafka-1                          1/1     Running   0          100s
-kafka-kafka-2                          1/1     Running   0          2m20s
-kudo-kafka-consumer-6b4dd5cd59-r7svb   1/1     Running   0          28m
-kudo-kafka-generator-d655d6dff-5pztl   1/1     Running   0          28m
-```
-
-You can also easily update the configuration of your Kafka cluster.
-
-For example, you can add more brokers using the command below.
-
-```bash
-kubectl patch instance kafka -p '{"spec":{"parameters":{"BROKER_COUNT":"5"}}}' --type=merge
-```
-
-The output should be similar to:
-```bash
-instance.kudo.dev/kafka patched
-```
-
-Check the status of the upgrade:
-
-```bash
-kubectl kudo plan status --instance=kafka
-```
-
-The output should be similar to:
-```bash
-Plan(s) for "kafka" in namespace "default":
-.
-└── kafka (Operator-Version: "kafka-1.0.0" Active-Plan: "deploy")
-    ├── Plan deploy (serial strategy) [COMPLETE]
-    │   └── Phase deploy-kafka [COMPLETE]
-    │       └── Step deploy (COMPLETE)
-    └── Plan not-allowed (serial strategy) [NOT ACTIVE]
-        └── Phase not-allowed (serial strategy) [NOT ACTIVE]
-            └── Step not-allowed (serial strategy) [NOT ACTIVE]
-                └── not-allowed [NOT ACTIVE]
-```
-
-And check that the corresponding Pods are running:
-
-```bash
-kubectl get pods | grep kafka
-```
-
-The output should be similar to:
-```bash
-kafka-kafka-0                          1/1     Running   0          70s
-kafka-kafka-1                          1/1     Running   0          102s
-kafka-kafka-2                          1/1     Running   0          2m35s
-kafka-kafka-3                          1/1     Running   0          3m44s
-kafka-kafka-4                          1/1     Running   0          3m15s
-kudo-kafka-consumer-6b4dd5cd59-r7svb   1/1     Running   0          33m
-kudo-kafka-generator-d655d6dff-5pztl   1/1     Running   0          33m
-```
+![dashboard nginx](../images/trafik_nginx_200.png)
 ## 7. Monitoring 
 
 
