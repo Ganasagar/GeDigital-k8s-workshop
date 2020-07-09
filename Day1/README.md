@@ -46,7 +46,168 @@ chmod 400 id_rsa_student#
 ssh -i id_rsa_student# centos@jumpserver-ip-address
 ```
 
-## 1. Deploy a kubernetes cluster using Konvoy
+
+## 1. Docker Lab
+
+
+### Containerize a Nodejs application
+
+1. Clone and review the NodeJS application repository from the github   
+```bash
+git clone https://github.com/Ganasagar/docker-demo.git
+```
+```bash
+cd docker-demo  && ll
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 ~]$ cd docker-demo  && ll
+total 52
+-rw-rw-r-- 1 centos centos   356 Jul  8 19:18 docker-compose.yml
+-rw-rw-r-- 1 centos centos    79 Jul  8 19:18 Dockerfile
+-rw-rw-r-- 1 centos centos  1055 Jul  8 19:18 index-db.js
+-rw-rw-r-- 1 centos centos   316 Jul  8 19:18 index.js
+drwxrwxr-x 2 centos centos    66 Jul  8 19:18 misc
+-rw-rw-r-- 1 centos centos   397 Jul  8 19:18 package.json
+-rw-rw-r-- 1 centos centos 26116 Jul  8 19:18 package-lock.json
+-rw-rw-r-- 1 centos centos    34 Jul  8 19:18 README.md
+drwxrwxr-x 2 centos centos    21 Jul  8 19:18 test
+```
+Note: In addition to a typical NodeJS application files you will notice there are two files, Dockerfile and docker-compose.yml, these files define the logic to create a docker image that you will see as you progress
+
+2. Review docker-compose file 
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ cat docker-compose.yml
+web:
+  build: .
+  command: node index-db.js
+  ports:
+    - "3000:3000"
+  links:
+    - db
+  environment:
+    MYSQL_DATABASE: myapp
+    MYSQL_USER: myapp
+    MYSQL_PASSWORD: mysecurepass
+    MYSQL_HOST: db
+db:
+  image: orchardup/mysql
+  ports:
+    - "3306:3306"
+  environment:
+    MYSQL_DATABASE: myapp
+    MYSQL_USER: myapp
+    MYSQL_PASSWORD: mysecurepass
+```
+3. Review Dockerfile file
+```bash
+cat Dockerfile
+```
+Output
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ cat Dockerfile
+FROM node:12
+WORKDIR /app
+ADD . /app
+RUN npm install
+EXPOSE 3000
+CMD npm start
+```
+
+4. Modifying the application, Update the message in line 5 of index.js to your liking 
+```bash
+vim index.js
+```
+Output:
+```bash
+  1 var express = require('express');
+  2 var app = express();
+  3
+  4 app.get('/', function (req, res) {
+  5   res.send('Darth vader is the Best Vader');
+  6 });
+  7
+  8 var server = app.listen(3000, function () {
+  9   var host = server.address().address;
+ 10   var port = server.address().port;
+ 11
+ 12   console.log('Example app listening at http://%s:%s', host, port);
+ 13 });
+```
+Note: Line 5 had hellow world previosly which has been changed to a new message instead of hello world.
+
+
+5. Now that you have the modified the application lets build your own custom image for the application using docker
+```bash
+docker build .
+```
+Output: 
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ docker build .
+Sending build context to Docker daemon  118.8kB
+Step 1/6 : FROM node:12
+ ---> 1fa6026dd8bb
+Step 2/6 : WORKDIR /app
+ ---> Using cache
+ ---> 9908b19b9c8c
+Step 3/6 : ADD . /app
+ ---> c9ecb96ada38
+Step 4/6 : RUN npm install
+ ---> Running in f9e198497b8c
+added 94 packages from 485 contributors and audited 95 packages in 1.862s
+found 1 low severity vulnerability
+  run `npm audit fix` to fix them, or `npm audit` for details
+Removing intermediate container f9e198497b8c
+ ---> ba1c127b3445
+Step 5/6 : EXPOSE 3000
+ ---> Running in 9c3d24bce77e
+Removing intermediate container 9c3d24bce77e
+ ---> a057a1697b26
+Step 6/6 : CMD npm start
+ ---> Running in 544abeb2ce9c
+Removing intermediate container 544abeb2ce9c
+ ---> 5379db985bf2
+Successfully built 5379db985bf2
+```
+6. Validate that you can see the image in docker image lists 
+```bash
+docker image ls
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ docker image ls
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+<none>              <none>              5379db985bf2        5 minutes ago       924MB
+node                12                  1fa6026dd8bb        8 days ago          918MB
+mesosphere/konvoy   v1.4.5              682dd4543c16        8 days ago          1.85GB
+```
+7. Run the container on the docker engine and exit out of the container
+```bash
+docker run -p 3000:3000 -it <image-id> 
+```
+Output: 
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ docker run -p 3000:3000 -it 5379db985bf2
+
+> myapp@0.0.1 start /app
+> node index.js
+
+Example app listening at http://:::3000
+^C[centos@ip-10-0-1-198 docker-demo]$
+```
+
+
+
+
+
+
+
+
+
+
+
+
+## 2. Deploy a kubernetes cluster using Konvoy
 
 ### Objectives
 - Deploy a Kubernetes cluster with all the addons you need to get a production ready container orchestration platform
@@ -160,98 +321,9 @@ ip-10-0-193-118.us-west-2.compute.internal   Ready    master   11m   v1.15.2
 ip-10-0-193-232.us-west-2.compute.internal   Ready    master   12m   v1.15.2
 ip-10-0-194-21.us-west-2.compute.internal    Ready    master   13m   v1.15.2
 ```
-## 2. Deploy a Custom Resource Definition
-
-In the Kubernetes API, a resource is an endpoint that stores a collection of API objects of a certain kind. For example, the built-in pods’ resource contains a collection of Pod objects. The standard Kubernetes distribution ships with many inbuilt API objects/resources. CRD comes into picture when we want to introduce our own object into the Kubernetes cluster to full fill our requirements. Once we create a CRD in Kubernetes we can use it like any other native Kubernetes object thus leveraging all the features of Kubernetes like its CLI, security, API services, RBAC etc
-
-The custom resource created is also stored in the etcd cluster with proper replication and lifecycle management. CRD allows us to use all the functionalities provided by a Kubernetes cluster for our custom objects and saves us the overhead of implementing them on our own.
 
 
-Create a CRD Definition in the file SSLConfig — CRD.YAML
-```bash
-cd ~/lab
-
-cat << EOF | > crd.yaml
-apiVersion: "apiextensions.k8s.io/v1beta1"
-kind: "CustomResourceDefinition"
-metadata:
-  name: "sslconfigs.d2iq.com"
-spec:
-  group: "d2iq.com"
-  version: "v1alpha1"
-  scope: "Namespaced"
-  names:
-    plural: "sslconfigs"
-    singular: "sslconfig"
-    kind: "SslConfig"
-  validation:
-    openAPIV3Schema:
-      required: ["spec"]
-      properties:
-        spec:
-          required: ["cert","key","domain"]
-          properties:
-            cert:
-              type: "string"
-              minimum: 1
-            key:
-              type: "string"
-              minimum: 1
-            domain:
-              type: "string"
-              minimum: 1
-EOF
-```
-Create the Custom Resource Definition 
-```bash
-kubectl create -f crd.yaml
-```
-Output should be something like below 
-```bash
-customresourcedefinition.apiextensions.k8s.io/sslconfigs.d2iq.com created
-```
-Check if our CRD exists 
-```bash
-kubectl get crd | grep -i sslconfig
-```
-Output should be something like:
-```bash
-sslconfigs.d2iq.com                                          2019-12-07T23:34:55Z
-```
-
-
-Create Objects using the definition created above
-
-```bash
-cat << EOF | > crd-object.yaml
-apiVersion: "d2iq.com/v1alpha1"
-kind: "SslConfig"
-metadata:
-  name: "sslconfig-disney.com"
-spec:
-  cert: "my cert file"
-  key : "my private  key"
-  domain: "*.disney.com"
-  provider: "digicert"
-EOF
-```
-Along with the mandatory fields cert, key and domain, we have also stored the information of the provider ( certifying authority ) of the cert.
-
-Check if our crd-objects exists when we query the api-server
-```bash
-kubectl get sslconfig
-```
-Output should be something like:
-```bash
-NAME                   AGE
-sslconfig-disney.com   2m46s
-```
-
-
-
-
-
-## 3. Scale Masters/Workers of a Konvoy k8s cluster
+## 3. Accessing
 
 Edit the `cluster.yaml` file to change the worker count from 5 to 6:
 ```
@@ -283,6 +355,59 @@ ip-10-0-194-48.us-west-2.compute.internal    Ready    master   48m    v1.15.2
 ip-10-0-194-91.us-west-2.compute.internal    Ready    master   46m    v1.15.2
 ip-10-0-195-21.us-west-2.compute.internal    Ready    master   47m    v1.15.2
 ```
+
+
+## 4. Application Lifecycle Management Lab
+
+Deployments are most commonly resources used in Kubernetes Clusters. A Deployment provides declartive updates for Pods and ReplicaSets by acting as a wrapper around pods and replicas. The Deployment controller which is responsible for ensure that the desired state of deployments is always equal to actual state by watching for any state changes. The moment a state change is noticied, it reconciles state to ensure the actual reflects the desired state.
+
+
+1. Create a Deployment specification file. 
+```bash
+cat << EOF > nginx-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+        ports:
+        - containerPort: 80
+EOF
+```bash
+kubectl run php-apache --image=k8s.gcr.io/hpa-example --requests=cpu=200m --expose --port=80
+```
+
+2. Review the nginx deployment file created. 
+```bash
+cat nginx-deployment.yaml
+```
+3. Deploy the nginx Application. 
+```bash
+kubectl apply -f nginx-deployment.yaml
+```
+3. Check if the Deployment was created.
+```bash
+kubectl get deployments
+```
+
+
+
+
+
 
 
 ## 4. Scale a k8s Application using HPA
