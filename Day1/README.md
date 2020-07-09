@@ -82,7 +82,7 @@ web:
   build: .
   command: node index-db.js
   ports:
-    - "3000:3000"
+    - "3000:5000"
   links:
     - db
   environment:
@@ -183,29 +183,102 @@ mesosphere/konvoy   v1.4.5              682dd4543c16        8 days ago          
 ```
 7. Run the container on the docker engine and exit out of the container
 ```bash
-docker run -p 3000:3000 -it <image-id> 
+docker run -p 3000:3000 -it <image-id> &
 ```
 Output: 
 ```bash
-[centos@ip-10-0-1-198 docker-demo]$ docker run -p 3000:3000 -it 5379db985bf2
+[centos@ip-10-0-1-198 docker-demo]$ docker run -p 3000:3000 -it 5379db985bf2 &
+[1] 16215
+[centos@ip-10-0-1-198 docker-demo]$
+```
+8. Validate that your container is up and running
+```bash
+docker ps 
+````
+Output: 
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ docker ps
+CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS                    NAMES
+23ef175bffb0        5379db985bf2        "docker-entrypoint.s…"   5 seconds ago       Up 5 seconds        0.0.0.0:3000->3000/tcp   dreamy_sinoussi
+```
+9. Curl your application to validate that its running as expected
+```bash
+curl localhost:5000
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ curl localhost:5000
+Darth vader is the Best Vader
+```
+### Publish your image to image-repository (we will use Dockerhub for this lab)
 
-> myapp@0.0.1 start /app
-> node index.js
+1. Create a docker hub account if you do not already have one at https://hub.docker.com/  using your favourite browser.
 
-Example app listening at http://:::3000
-^C[centos@ip-10-0-1-198 docker-demo]$
+2. Once an account is created return to your workstation and login into your docker account using CLI
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ docker login
+Login with your Docker ID to push and pull images from Docker Hub. If you don't have a Docker ID, head over to https://hub.docker.com to create one.
+Username: ganasagar
+Password:
+WARNING! Your password will be stored unencrypted in /home/centos/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+
+Login Succeeded
 ```
 
+3. list your docker images
+```bash
+docker image ls 
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ docker image ls
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+<none>              <none>              5379db985bf2        41 minutes ago      924MB
+node                12                  1fa6026dd8bb        8 days ago          918MB
+mesosphere/konvoy   v1.4.5              682dd4543c16        8 days ago          1.85GB
+```
+4. Add a tag to your  image and review that its been updated 
+```bash
+docker tag <image-id> <docker-username>/demo-app && docker image ls
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ docker tag 5379db985bf2 ganasagar/demo-app
+[centos@ip-10-0-1-198 docker-demo]$ docker image ls
+REPOSITORY           TAG                 IMAGE ID            CREATED             SIZE
+ganasagar/demo-app   latest              5379db985bf2        51 minutes ago      924MB
+<none>               <none>              a73427aaecb3        3 hours ago         924MB
+node                 12                  1fa6026dd8bb        8 days ago          918MB
+mesosphere/konvoy    v1.4.5              682dd4543c16        8 days ago          1.85GB
+mesosphere/konvoy    v1.3.0-beta7        333262d0fcc2        7 months ago        1.7GB
+```
+Note: You will see now your image will have a repo name and tag added to it. 
 
-
-
-
-
-
-
-
-
-
+5. Push your image to the Dockerhub using its repository name from above 
+```bash
+docker push <repository>
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ docker push ganasagar/demo-app
+The push refers to repository [docker.io/ganasagar/demo-app]
+1e9fa7429746: Pushed
+6346be691b3e: Pushed
+ac75573cebc5: Pushed
+a0dec5cb284e: Mounted from library/node
+03d91b28d371: Mounted from library/node
+4d8e964e233a: Mounted from library/node
+bc17cd405095: Mounted from library/node
+ee854067fbbd: Mounted from library/node
+740ffea5d5c3: Mounted from library/node
+eac9ead92b24: Mounted from library/node
+23bca356262f: Mounted from library/node
+8354d5896557: Mounted from library/node
+latest: digest: sha256:feeb5b6e53eca6519fbbe3419be5d51aec2a4e14a4ec80fc7aad475206c51b00 size: 2841
+```
+6. Go to the Docker-hub website login and validate that your image exists and verify the last updated time. 
 
 ## 2. Deploy a kubernetes cluster using Konvoy
 
@@ -323,91 +396,231 @@ ip-10-0-194-21.us-west-2.compute.internal    Ready    master   13m   v1.15.2
 ```
 
 
-## 3. Accessing
+## 3. Pod Lifecycle Lab
 
-Edit the `cluster.yaml` file to change the worker count from 5 to 6:
-```
-...
-  nodePools:
-  - name: worker
-    count: 6
-...
-```
-
-And run `konvoy up --yes` again.
-
-Check that there are now 6 kubelets deployed:
-
-```
-kubectl get nodes
-```
-
-The output should be similar to:
+1. Create a Pod specification file.
 ```bash
-NAME                                         STATUS   ROLES    AGE    VERSION
-ip-10-0-128-127.us-west-2.compute.internal   Ready    <none>   45m    v1.15.2
-ip-10-0-129-21.us-west-2.compute.internal    Ready    <none>   45m    v1.15.2
-ip-10-0-129-33.us-west-2.compute.internal    Ready    <none>   2m2s   v1.15.2
-ip-10-0-130-39.us-west-2.compute.internal    Ready    <none>   45m    v1.15.2
-ip-10-0-131-155.us-west-2.compute.internal   Ready    <none>   45m    v1.15.2
-ip-10-0-131-252.us-west-2.compute.internal   Ready    <none>   45m    v1.15.2
-ip-10-0-194-48.us-west-2.compute.internal    Ready    master   48m    v1.15.2
-ip-10-0-194-91.us-west-2.compute.internal    Ready    master   46m    v1.15.2
-ip-10-0-195-21.us-west-2.compute.internal    Ready    master   47m    v1.15.2
+cat << EOF > multi-container-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rss-site
+  labels:
+    app: web
+spec:
+  containers:
+    - name: front-end
+      image: nginx
+      ports:
+        - containerPort: 80
+    - name: rss-reader
+      image: ganasagar/rss-php-nginx:v1
+      ports:
+        - containerPort: 88
+```
+2. Validate that the pod is running. 
+```bash
+kubectl get pods 
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ k get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+rss-site                2/2     Running   0          12m
+sise-574c4c79d6-zcvpc   1/1     Running   0          43m
+```
+3. Describe the pod and review there were two containers and review the output along with lifecycle events at the bottom
+```bash
+kubectl describe pod/rss-site
+```
+4. Obtain the last 10 lines of logs from front-end container in POD
+```bash
+kubectl logs -c front-end   rss-site --tail=10
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 docker-demo]$ k logs -c front-end   rss-site --tail=10
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: Getting the checksum of /etc/nginx/conf.d/default.conf
+10-listen-on-ipv6-by-default.sh: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+```
+5. Delete the pod and clean up 
+```bash
+kubectl delete pod/rss-site
 ```
 
-
-## 4. Application Lifecycle Management Lab
+## 4. Deploying a containerized application in Kubernetes
 
 Deployments are most commonly resources used in Kubernetes Clusters. A Deployment provides declartive updates for Pods and ReplicaSets by acting as a wrapper around pods and replicas. The Deployment controller which is responsible for ensure that the desired state of deployments is always equal to actual state by watching for any state changes. The moment a state change is noticied, it reconciles state to ensure the actual reflects the desired state.
 
 
 1. Create a Deployment specification file. 
 ```bash
-cat << EOF > nginx-deployment.yaml
+cat << EOF > my-app-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx-deployment
+  name: my-app
   labels:
-    app: nginx
+    app: my-app
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: nginx
+      app: my-app
   template:
     metadata:
       labels:
-        app: nginx
+        app: my-app
     spec:
       containers:
-      - name: nginx
-        image: nginx:1.14.2
+      - name: my-app
+        image: ganasagar/demo-app
         ports:
         - containerPort: 80
 EOF
+```
+2. Copy your own demo-app image name from dockerhub and update the image name feild in the Deployment file above. 
 ```bash
-kubectl run php-apache --image=k8s.gcr.io/hpa-example --requests=cpu=200m --expose --port=80
+vim nginx-deployment.yaml
+```
+3. Once done, Deploy your application using the command below 
+```bash
+kubectl apply -f my-app-deployment.yaml
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 test]$ kubectl get deployment
+NAME     READY   UP-TO-DATE   AVAILABLE   AGE
+my-app   3/3     3            3           14s
+sise     1/1     1            1           94m
+```
+4. Notice that pods are all distributed across different different Availabity zones for High Availability 
+```bash
+kubectl get pods -l app=my-app -o wide
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 test]$ kubectl get pods -l app=my-app -o wide
+NAME                      READY   STATUS    RESTARTS   AGE     IP                NODE                                         NOMINATED NODE   READINESS GATES
+my-app-74bb847669-cz6mh   1/1     Running   0          9m38s   192.168.78.89     ip-10-0-128-192.us-west-2.compute.internal   <none>           <none>
+my-app-74bb847669-sppvx   1/1     Running   0          9m38s   192.168.184.221   ip-10-0-131-172.us-west-2.compute.internal   <none>           <none>
+my-app-74bb847669-tt7d7   1/1     Running   0          9m38s   192.168.196.155   ip-10-0-130-113.us-west-2.compute.internal   <none>           <none>
+```
+5. Expose the application using a loadbalancer
+```bash
+kubectl expose deploy/my-app --port=80 --type=LoadBalancer
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 test]$ kubectl expose deploy/my-app --port=80 --type=LoadBalancer
+service/my-app exposed
+```
+Note: Give it a couple of minutes AWS takes a few minutes to provision a new Loadbalancer
+
+6. Review your serice endoint information. 
+```bash
+kubectl get service 
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 test]$ kubectl get service
+NAME         TYPE           CLUSTER-IP   EXTERNAL-IP                                                               PORT(S)        AGE
+kubernetes   ClusterIP      10.0.0.1     <none>                                                                    443/TCP        154m
+my-app       LoadBalancer   10.0.48.46   abb741257ed124e13a5299376818d141-2088114177.us-west-2.elb.amazonaws.com   80:31828/TCP   4m21s
+```
+7. Copy the External-IP endpoint and paste it in a browser to access the application 
+
+
+
+## 5. Application Lifecycle Management Lab
+
+1. Create the Deployment by running the following command:
+```bash
+kubectl apply -f https://k8s.io/examples/controllers/nginx-deployment.yaml
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 new-deploy]$ kubectl apply -f https://k8s.io/examples/controllers/nginx-deployment.yaml
+deployment.apps/nginx-deployment created
 ```
 
-2. Review the nginx deployment file created. 
-```bash
-cat nginx-deployment.yaml
-```
-3. Deploy the nginx Application. 
-```bash
-kubectl apply -f nginx-deployment.yaml
-```
-3. Check if the Deployment was created.
+2. Check if the Deployment was created.
 ```bash
 kubectl get deployments
 ```
+Output:
+```bash
+[centos@ip-10-0-1-198 new-deploy]$ kubectl get deployment
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3/3     3            3           72s
+```
 
+3. Review the rollout history of the deployment 
+```bash
+kubectl rollout history deploy/nginx-deployment
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 new-deploy]$ kubectl rollout history deploy/nginx-deployment
+deployment.apps/nginx-deployment
+REVISION  CHANGE-CAUSE
+1         <none>
+```
 
+4. Update the image with new image version
+```bash
+kubectl set image deployment/nginx-deployment nginx=nginx:1.16.1 
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 new-deploy]$ kubectl set image deployment/nginx-deployment nginx=nginx:1.16.1
+deployment.apps/nginx-deployment image updated
+```
 
+5. Review the rollout history 
+```bash
+kubectl rollout history deploy/nginx-deployment
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 new-deploy]$ kubectl rollout history deploy/nginx-deployment
+deployment.apps/nginx-deployment
+REVISION  CHANGE-CAUSE
+1         <none>
+2         kubectl set image deployment/nginx-deployment nginx=nginx:1.16.1
+```
 
-
+5. Do a roll back on the recent upgrade and verify the pods being replaced 
+```bash
+kubectl rollout undo deployment.v1.apps/nginx-deployment
+```
+```bash
+kubectl get pods -l app=nginx-deployment
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 new-deploy]$ kubectl rollout undo deployment.v1.apps/nginx-deployment
+deployment.apps/nginx-deployment rolled back
+[centos@ip-10-0-1-198 new-deploy]$ k get deploy
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3/3     3            3           13m
+old-nginx          3/3     3            3           28m
+sise               1/1     1            1           175m
+static-site        3/3     3            3           24m
+[centos@ip-10-0-1-198 new-deploy]$ k get pods
+NAME                                READY   STATUS        RESTARTS   AGE
+nginx-deployment-574b87c764-888wg   1/1     Running       0          8s
+nginx-deployment-574b87c764-hpgn6   1/1     Running       0          12s
+nginx-deployment-574b87c764-l2tdh   1/1     Running       0          10s
+nginx-deployment-5d66cc795f-dkks4   0/1     Terminating   0          6m46s
+nginx-deployment-5d66cc795f-gx2kp   0/1     Terminating   0          6m56s
+nginx-deployment-5d66cc795f-qnz5h   0/1     Terminating   0          6m52s
+```
 
 
 ## 4. Scale a k8s Application using HPA
@@ -460,122 +673,7 @@ Note : This would take time a minute or two for the Scaling up and Downscale has
 You will see HPA scale the pods from 1 up to our configured maximum (10) until the CPU average is below our target (50%)
 
 
-## 5. Kubernetes logging/debugging
 
-In Konvoy, all the logs are stored in an Elasticsearch cluster and exposed through Kibana.
-
-To access the Kibana UI, click on the `Kibana Logs` icon on the Konvoy UI.
-
-![Kibana UI](../images/kibana.png)
-
-By default, it only shows the logs for the latest 15 minutes.
-
-Click on the top right corner and select `Last 24 hours`.
-
-Then, search for `redis`:
-
-![Kibana Redis](../images/kibana-redis.png)
-
-You'll see all the logs related to the redis Pod and Service you deployed previously.
-
-### 6. Ingress troubleshooting.
-
-In this section, we will leverage Konvoy logging to troubleshoot Ingress failure issue.
-
-We will deploy a nginx application and expose it via L7 loadbalancer. The application can be accessed with URLs follows below patten.
-
-`http[s]://$(kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}")/applications/nginx/`
-
-* 1st, let's deploy a nginx application and scale it to 3
-
-```bash
-kubectl run --image=nginx --replicas=3 --port=80 --restart=Always nginx
-```
-* 2nd, expose a in cluster service
-
-```bash
-kubectl expose deploy nginx --port 8080 --target-port 80 --type NodePort --name "svc-nginx"
-```
-* 3rd, create a ingress to expose service via Layer7 LB
-
-```bash
-cat << EOF | kubectl apply -f -
-apiVersion: extensions/v1beta1
-kind: Ingress
-metadata:
-  name: nginx-root
-  namespace: default
-spec:
-  rules:
-  - http:
-      paths:
-      - backend:
-          serviceName: svc-nginx
-          servicePort: 8080
-        path:  /applications/nginx/
-EOF
-```
-* 4th, Now check Ingress configure in Traefik
-
-![Traefik nginx](../images/trafik_nginx.png)
-
-The `Traefik dashboard` indicates the nginx application is ready to receive traffic but if you try access nginx with URL listed below, you will notice `404 Not Found` error like:
-
-```bash
-curl -k https://$(kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}")/applications/nginx/
-```
-
-Don't forget the trailing slash at the end of the URL. Otherwise, you won't generate a 404 error.
-
-If you would like to see the error in the browser, get the Loadbalancer's endpoint
-```bash
-kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}"
-```
-Output should give you the AWS-ELB endpoint use that in the browser like below:
-https://{endpoint}/applications/nginx/
-
-
-![Traefik nginx](../images/trafik_404.png)
-
-
-Let's troubleshoot this failure with Konvoy Kibana.
-
-![Kibana nginx](../images/kibana_nginx.png)
-
-With Konvoy Kibana's near real time log collection and indexing, we can easily identify the ingress traffic was eventually handled by a pod `kubernetes.pod_name:nginx-755464dd6c-dnvp9` in nginx service. The log also gave us more information on the failure, `"GET /applications/nginx/ HTTP/1.1" 404`, which tell us that nginx can't find resource at path `/applications/nginx/`.
-
-That is neat! Because w/o Kibana, you wouldn't know which Pod in our nginx service handles this request. (Our nginx deployment example launched 3 Pods to serve HTTP request) Not mention if there are multiple nginx service exists in the same K8s cluster but hosted at different namespace.
-
-To fix this failure requires some knownledge on Nginx configuration. In general, when nginx is launched with default configuration, it serves a virtual directory on its `ROOT` path `(/)`. When receives HTTP requests, the nginx walk through its virtual directory to return back resources to the client.
-
-In terms of out example, the `Ingress` configuration we submitted to k8s was configured to a path at `/applications/nginx/`. The `traefik` ingress controller sees this `Ingress configuration` and forwards any resource request at path `/applications/nginx/` to the down stream nginx service at the same path. The pod `kubernetes.pod_name:nginx-755464dd6c-dnvp9` received this request but nginx instance in this pod failed to locate any resource under path `/applications/nginx/`. That is the reason we saw this failure, `"GET /applications/nginx/ HTTP/1.1" 404`.  
-
-You can, of course, configure nginx instance to serve resources at path `/applications/nginx/`. But an alternative solution is leverage `traefik` to strip PATH `/applications/nginx/` to `ROOT (/)` before route requests to nginx.
-
-According to `Traefik` documentation [PathPrefixStrip](https://docs.traefik.io/configuration/backends/kubernetes/), the annotation `(traefik.ingress.kubernetes.io/rule-type)` is exactly what we need to direct traefik to strip ingress HOST PATH to ROOT PATH forementioned.
-
-To update `Ingress`, we can use below command.
-
-```bash
-cat << EOF | kubectl apply -f -
-apiVersion: extensions/v1beta1
-kind: Ingress
-metadata:
-  annotations:
-    traefik.frontend.rule.type: PathPrefixStrip
-  name: nginx-root
-  namespace: default
-spec:
-  rules:
-  - http:
-      paths:
-      - backend:
-          serviceName: svc-nginx
-          servicePort: 8080
-        path:  /applications/nginx/
-EOF
-```
-![dashboard nginx](../images/trafik_nginx_200.png)
 
 ## 7. Upgrade a Kubernetes cluster using Konvoy
 
