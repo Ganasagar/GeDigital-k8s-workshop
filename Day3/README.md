@@ -217,14 +217,14 @@ Finally, run the following command to see the URL of the Load Balancer created o
 
 ```bash
 kubectl get svc redis
-
+```
 The output should be similar to:
 ```bash
 NAME    TYPE           CLUSTER-IP   EXTERNAL-IP                                                               PORT(S)          AGE
 redis   LoadBalancer   10.0.51.32   a92b6c9216ccc11e982140acb7ee21b7-1453813785.us-west-2.elb.amazonaws.com   6379:31423/TCP   43s
 ```
 
-You need to wait for a few minutes while the Load Balancer is created on AWS and the name resolution in place.
+You need to wait for a few minutes while the Load Balancer is created on AWS and the name resolution in place. 
 
 ```bash
 until nslookup $(kubectl get svc redis --output jsonpath={.status.loadBalancer.ingress[*].hostname})
@@ -233,7 +233,7 @@ do
 done
 ```
 
-You can validate that you can access the redis Pod from your laptop using telnet:
+You can validate that you can access the redis Pod from your laptop using telnet once done you can enter `quit` like below to exit out:
 
 ```bash
 telnet $(kubectl get svc redis --output jsonpath={.status.loadBalancer.ingress[*].hostname}) 6379
@@ -542,21 +542,105 @@ Displayed on the page is a description of the book, book details (ISBN, number o
 #### Download the Istio-repo
 Go to the Istio release page to download the installation file corresponding to your OS. Alternatively, on a macOS or Linux system, you can run the following command to download and extract the latest release automatically:
 
-Run the following commands to deploy the bookinfo application:
+
+
+Run the following commands to download Istio artifacts needed for the lab:
 ```bash
 curl -L https://istio.io/downloadIstio | sh -
 ```
 
+Install istioctl tool to your profile 
+```bash
+export PATH="$PATH:/home/centos/istio-1.6.4/istio-1.6.5/bin"
+```
+Validate if you can run istioctl commands 
+```bash
+istioctl --help
+```
+Output:
+```
+[centos@ip-10-0-1-191 istio-1.6.4]$ istioctl --help
+Istio configuration command line utility for service operators to
+debug and diagnose their Istio mesh.
+
+Usage:
+  istioctl [command]
+
+Available Commands:
+  analyze         Analyze Istio configuration and print validation messages
+  authz           (authz is experimental. Use `istioctl experimental authz`)
+  convert-ingress Convert Ingress configuration into Istio VirtualService configuration
+  dashboard       Access to Istio web UIs
+  deregister      De-registers a service instance
+  experimental    Experimental commands that may be modified or deprecated
+  help            Help about any command
+  install         Applies an Istio manifest, installing or reconfiguring Istio on a cluster.
+  kube-inject     Inject Envoy sidecar into Kubernetes pod resources
+  manifest        Commands related to Istio manifests
+  operator        Commands related to Istio operator controller.
+  profile         Commands related to Istio configuration profiles
+  proxy-config    Retrieve information about proxy configuration from Envoy [kube only]
+  proxy-status    Retrieves the synchronization status of each Envoy in the mesh [kube only]
+  register        Registers a service instance (e.g. VM) joining the mesh
+  upgrade         Upgrade Istio control plane in-place
+  validate        Validate Istio policy and rules (NOTE: validate is deprecated and will be removed in 1.6. Use 'istioctl analyze' to validate configuration.)
+  verify-install  Verifies Istio Installation Status or performs pre-check for the cluster before Istio installation
+  version         Prints out build version information
+
+Flags:
+      --context string          The name of the kubeconfig context to use
+  -h, --help                    help for istioctl
+  -i, --istioNamespace string   Istio system namespace (default "istio-system")
+  -c, --kubeconfig string       Kubernetes configuration file
+  -n, --namespace string        Config namespace
+
+Additional help topics:
+  istioctl options         Displays istioctl global options
+
+Use "istioctl [command] --help" for more information about a command.
+```
+
 Move into the Istio directory 
 ```bash
-cd istio-1.4.0
+cd istio-1.6.4
 ```
-The default Istio installation uses automatic sidecar injection. Label the namespace that will host the application with istio-injection=enabled:
+The default Istio installation uses automatic sidecar injection. Create a new namespace and Label the namespace that will host the application with istio-injection=enabled:
 ```bash
-kubectl label namespace default istio-injection=enabled 
+kubectl create namespace istio-ns
 
-kubectl label namespace default ca.istio.io/override=true
+kubectl label namespace istio-ns istio-injection=enabled 
+
+kubectl label namespace istio-ns ca.istio.io/override=true
 ```
+
+List all namespace and switch namespaces using `kubens` tools
+
+```bash
+kubens 
+
+kubens istio-ns
+```
+output should be something like below 
+```bash
+[centos@ip-10-0-1-191 istio-1.6.4]$ kubens
+cert-manager
+default
+default-workspace-vmq2p
+istio-ns
+istio-system
+kommander
+kommander-system
+kube-node-lease
+kube-public
+kube-system
+kubeaddons
+velero
+velero-minio-operator
+[centos@ip-10-0-1-191 istio-1.6.4]$ kubens istio-ns
+Context "gabbar-k8s-cluster-admin@gabbar-k8s-cluster" modified.
+Active namespace is "istio-ns".
+```
+
 Deploy your application using the kubectl command:
 ```bash
 kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml

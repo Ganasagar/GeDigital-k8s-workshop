@@ -1,8 +1,8 @@
 ## Istio-Traffic-Management
 
-### A. Request Routing
+### A. Request Routing. 
 
-Ensure you default destination rules 
+Ensure your default destination rules 
 ```bash
 kubectl apply -f samples/bookinfo/networking/destination-rule-all-mtls.yaml
 ```
