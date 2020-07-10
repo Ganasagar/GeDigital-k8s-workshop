@@ -544,14 +544,17 @@ Go to the Istio release page to download the installation file corresponding to 
 
 
 
-Run the following commands to download Istio artifacts needed for the lab:
+Go to home directory and Run the following commands to download Istio artifacts needed for the lab:
 ```bash
-curl -L https://istio.io/downloadIstio | sh -
-```
+cd ~
 
-Install istioctl tool to your profile 
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.4.3 sh -
+```
+ 
+
+Install istioctl to your path
 ```bash
-export PATH="$PATH:/home/centos/istio-1.6.4/istio-1.6.5/bin"
+export PATH="$PATH:/home/centos/istio-1.4.3/istio-1.4.3/bin"
 ```
 Validate if you can run istioctl commands 
 ```bash
@@ -600,10 +603,9 @@ Additional help topics:
 Use "istioctl [command] --help" for more information about a command.
 ```
 
-Move into the Istio directory 
-```bash
-cd istio-1.6.4
-```
+
+#### Create a new namespace for Istio and enable side-car injection 
+
 The default Istio installation uses automatic sidecar injection. Create a new namespace and Label the namespace that will host the application with istio-injection=enabled:
 ```bash
 kubectl create namespace istio-ns
@@ -649,17 +651,17 @@ The command launches all four services shown in the bookinfo application archite
 
 Confirm all services and pods are correctly defined and running:
 ```bash
-kubectl get services
+kubectl get services,pods
+```
+Output:
+```
 NAME                       CLUSTER-IP   EXTERNAL-IP   PORT(S)              AGE
 details                    10.0.0.31    <none>        9080/TCP             6m
 kubernetes                 10.0.0.1     <none>        443/TCP              7d
 productpage                10.0.0.120   <none>        9080/TCP             6m
 ratings                    10.0.0.15    <none>        9080/TCP             6m
 reviews                    10.0.0.170   <none>        9080/TCP             6m
-```
-and
-```bash
-kubectl get pods
+
 NAME                                        READY     STATUS    RESTARTS   AGE
 details-v1-1520924117-48z17                 2/2       Running   0          6m
 productpage-v1-560495357-jk1lz              2/2       Running   0          6m
@@ -710,7 +712,10 @@ Note: This deploys a Gateway + Virtual service to establish a route to the booki
 
 Confirm the gateway & virtual service has been created:
 ```bash
-k get vs,gw
+kubectl get vs,gw
+```
+Output:
+```
 NAME                                          GATEWAYS             HOSTS   AGE
 virtualservice.networking.istio.io/bookinfo   [bookinfo-gateway]   [*]     41m
 
@@ -728,10 +733,13 @@ curl -s http://${GATEWAY_URL}/productpage | grep -o "<title>.*</title>"
 To confirm that the Bookinfo application is accessible from outside the cluster, using browser do the following steps:
 ```bash
 kubectl get svc istio-ingressgateway -n istio-system
-
+```
+Output:
+```
 NAME                   TYPE           CLUSTER-IP    EXTERNAL-IP                                                               PORT(S)                                                                                                                                      AGE
 istio-ingressgateway   LoadBalancer   10.0.11.122   a32c15819094e4a14a920331501f12b0-1882016049.us-west-2.elb.amazonaws.com   15020:30405/TCP,80:31380/TCP,443:31390/TCP,31400:31400/TCP,15029:30912/TCP,15030:31276/TCP,15031:31143/TCP,15032:32426/TCP,15443:30178/TCP   42h
 ```
+
 In your browser run hit the AWS-ELB endpoint with path for Bookinfo application like below:
 
 http://a32c15819094e4a14a920331501f12b0-1882016049.us-west-2.elb.amazonaws.com/productpage
@@ -740,8 +748,9 @@ http://a32c15819094e4a14a920331501f12b0-1882016049.us-west-2.elb.amazonaws.com/p
 ![Istio](../images/istio.png)
 
 
+NOTE: `PROCEED WITH NEXT SECTION ONLY IF YOU ARE DONE WITH WORKSHOP`
 
-## 8. Destroy a Konvoy cluster
+## 8. Destroy a Konvoy cluster (Only if you are not done with the workshop)
 
 When you run konvoy down, the command removes all of the AWS infrastructure resources create for the cluster, including any volumes that are backing PersistentVolumesClaims with a Delete ReclaimPolicy.
 
