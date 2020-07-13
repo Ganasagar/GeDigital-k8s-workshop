@@ -308,6 +308,7 @@ konvoy init
 ll
 ```
 Note: `This command will create files required to build your cluster.`
+
 Output:
 ```
 [centos@ip-10-0-1-61 lab]$ konvoy init
@@ -317,7 +318,8 @@ Created configuration file successfully!
 total 16
 -rw-r--r-- 1 centos centos 4275 Jul 13 16:25 cluster.yaml
 -rw------- 1 centos centos 3247 Jul 13 16:25 lab-ssh.pem
--rw------- 1 centos centos  725 Jul 13 16:25 lab-ssh.pub```
+-rw------- 1 centos centos  725 Jul 13 16:25 lab-ssh.pub
+```
 
 
 Modify the name and tag your cluster with your name and add expiration tag. Notice line 17 & 18 in the sample below
@@ -474,7 +476,20 @@ spec:
       image: ganasagar/rss-php-nginx:v1
       ports:
         - containerPort: 88
+EOF
 ```
+Review the pod-spec and create the pod
+```bash
+cat multi-container-pod.yaml
+
+kubectl create -f multi-container-pod.yaml
+```
+output:
+```
+[centos@ip-10-0-1-61 lab]$ k create -f multi-container-pod.yaml
+pod/rss-site created
+```
+
 2. Validate that the pod is running. 
 ```bash
 kubectl get pods 
@@ -692,7 +707,136 @@ kubectl scale deployment.v1.apps/nginx-deployment --replicas=10
 kubectl delete deployment nginx-deployment
 ``` 
 
-## 6. Scale a k8s Application using HPA
+## 6. Scheduling LAB 
+Labels are key/value pairs that are attached to objects, such as pods. Labels are intended to be used to specify identifying attributes of objects that are meaningful and relevant to users, but do not directly imply semantics to the core system. Labels can be used to organize and to select subsets of objects. Labels can be attached to objects at creation time and subsequently added and modified at any time. Each object can have a set of key/value labels defined. Each Key must be unique for a given object.
+
+1. Create a deployment file with a label selector
+```bash
+cat << EOF > node-selector.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-selector
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: node-selector
+  template:
+    metadata:
+      labels:
+        app: node-selector
+    spec:
+      containers:
+      - name: k8s-demo
+        image: nginx
+        ports:
+        - name: web-port
+          containerPort: 80
+      nodeSelector:
+        disktype: change-this
+EOF
+```
+2. Lets assume are want to deploy an app on node with `disktype=ssd` so modify the node-selector disktype to `ssd`.
+
+```bash
+vim node-selector.yaml
+```
+3. Lets create the deployment and see what happens. Since there are no nodes with that label in the cluster, Kubernetes should be unable to shedule the workload and the pods should go into pending state
+```bash
+kubectl create -f node-selector.yaml
+```
+```bash
+kubectl get pods
+```
+Output:
+```bash
+[centos@ip-10-0-1-61 ~]$ k create -f node-selector.yaml
+deployment.apps/helloworld-deployment created
+[centos@ip-10-0-1-61 ~]$ k get pods
+NAME                                     READY   STATUS    RESTARTS   AGE
+node-selector-756489575d-7hcgq   0/1     Pending   0          11s
+node-selector-756489575d-g9wr9   0/1     Pending   0          11s
+node-selector-756489575d-s4wq8   0/1     Pending   0          11s
+```
+4. Lets describe the one of the pods and scroll to the events section at the bottom, to find out what's hapenning to the deployment 
+
+```bash
+kubectl describe pod helloworld-deployment-756489575d-7hcgq
+```
+output:
+```
+...
+....
+...
+... Output snipped
+...
+Events:
+  Type     Reason            Age        From               Message
+  ----     ------            ----       ----               -------
+  Warning  FailedScheduling  <unknown>  default-scheduler  0/7 nodes are available: 7 node(s) didn't match node selector.
+  Warning  FailedScheduling  <unknown>  default-scheduler  0/7 nodes are available: 7 node(s) didn't match node selector.
+```
+5. We can see towards the bottom that scheduling failed as none of the nodes matched the label we selected. lets label one of the nodes and see what happens. First lets query the available nodes 
+
+```bash
+kubectl get nodes
+```
+Output:
+```
+[centos@ip-10-0-1-61 ~]$ kubectl get nodes
+NAME                                         STATUS   ROLES    AGE    VERSION
+ip-10-0-128-211.us-west-2.compute.internal   Ready    <none>   133m   v1.16.12
+ip-10-0-130-190.us-west-2.compute.internal   Ready    <none>   133m   v1.16.12
+ip-10-0-131-170.us-west-2.compute.internal   Ready    <none>   133m   v1.16.12
+ip-10-0-131-7.us-west-2.compute.internal     Ready    <none>   133m   v1.16.12
+ip-10-0-193-179.us-west-2.compute.internal   Ready    master   135m   v1.16.12
+ip-10-0-194-251.us-west-2.compute.internal   Ready    master   134m   v1.16.12
+ip-10-0-195-146.us-west-2.compute.internal   Ready    master   134m   v1.16.12
+```
+
+6. Label one of the worker nodes in the list that's not a master (Avoid any node with ROLE == master) 
+
+```bash
+kubectl label node ip-10-0-128-211.us-west-2.compute.internal disktype=ssd
+```
+Output:
+```
+[centos@ip-10-0-1-61 ~]$ kubectl label node ip-10-0-128-211.us-west-2.compute.internal disktype=ssd
+node/ip-10-0-128-211.us-west-2.compute.internal labeled
+```
+7. Now lets check if the pods are still in pending state 
+```bash
+kubectl get pods
+```
+Output:
+```
+[centos@ip-10-0-1-61 ~]$ k get pods
+NAME                                     READY   STATUS    RESTARTS   AGE
+node-selector-756489575d-7hcgq   1/1     Running   0          13m
+node-selector-756489575d-g9wr9   1/1     Running   0          13m
+node-selector-756489575d-s4wq8   1/1     Running   0          13m
+```
+8. Check if all of the pods are running on the same we labeled.  
+```bash
+kubectl get pods -o wide
+```
+Output:
+```
+[centos@ip-10-0-1-61 ~]$ k get pods -o wide
+NAME                                     READY   STATUS    RESTARTS   AGE   IP               NODE                                         NOMINATED NODE   READINESS GATES
+node-selector-756489575d-7hcgq   1/1     Running   0          15m   192.168.42.166   ip-10-0-128-211.us-west-2.compute.internal   <none>           <none>
+node-selector-756489575d-g9wr9   1/1     Running   0          15m   192.168.42.167   ip-10-0-128-211.us-west-2.compute.internal   <none>           <none>
+node-selector-756489575d-s4wq8   1/1     Running   0          15m   192.168.42.168   ip-10-0-128-211.us-west-2.compute.internal   <none>           <none>
+```
+Note: You will notice that `NODE` name of all the pods are same and its the same as the node we labeled above.
+
+9. Clean up the deployments once done 
+```bash
+kubectl delete deploy node-selector
+```
+
+## 7. Scale a k8s Application using HPA
 The following command will create a Horizontal Pod Autoscaler that maintains between 1 and 10 replicas of the Pods controlled by the PHP-apache deployment we created in the first step of these instructions. Roughly speaking, HPA will increase and decrease the number of replicas (via the deployment) to maintain an average CPU utilization across all Pods of 50% (since each pod requests 200 milli-cores by kubectl run, this means average CPU usage of 100 milli-cores).
 
 Create HPA namespace
