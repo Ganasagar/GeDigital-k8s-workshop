@@ -520,9 +520,55 @@ Output:
 /docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
 /docker-entrypoint.sh: Configuration complete; ready for start up
 ```
-5. Delete the pod and clean up 
+5. Open a shell into the pod by exec into it using kubectl
 ```bash
-kubectl delete pod/rss-site
+kubectl exec -it rss-site -c front-end bash
+```
+Note: `-it` stands for interactively opening up a shell and `-c` stands for name of the container
+
+6. once inside the container, curl localhost to see if the nginx web-page is being served. 
+```bash
+curl locahost
+```
+Output:
+```
+[centos@ip-10-0-1-61 ~]$ kubectl exec -it rss-site -c front-end bash
+root@rss-site:/# curl localhost
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+    body {
+        width: 35em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+
+<p>For online documentation and support please refer to
+<a href="http://nginx.org/">nginx.org</a>.<br/>
+Commercial support is available at
+<a href="http://nginx.com/">nginx.com</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
+```
+
+7. Enter exit to get out of the container. 
+```bash
+exit
+```
+
+8. Delete the pod and clean up 
+```bash
+kubectl delete pod rss-site
 ```
 
 ## 4. Deploying a containerized application in Kubernetes
