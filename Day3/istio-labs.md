@@ -21,6 +21,9 @@ Because configuration propagation is eventually consistent, wait a few seconds f
 Display the defined routes with the following command:
 ```bash
 kubectl get virtualservices -o yaml
+```
+Output:
+```
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
@@ -100,6 +103,10 @@ kubectl apply -f samples/bookinfo/networking/virtual-service-reviews-test-v2.yam
 Confirm the rule is created:
 ```bash
 kubectl get virtualservice reviews -o yaml
+```
+
+Output:
+```
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:

@@ -47,8 +47,7 @@ ssh -i id_rsa_student# centos@jumpserver-ip-address
 ```
 
 
-## 1. Docker Lab
-
+## 1. Docker  Containerization Lab
 
 ### Containerize a Nodejs application
 
@@ -82,7 +81,7 @@ web:
   build: .
   command: node index-db.js
   ports:
-    - "3000:5000"
+    - "3000:3000"
   links:
     - db
   environment:
@@ -282,7 +281,7 @@ latest: digest: sha256:feeb5b6e53eca6519fbbe3419be5d51aec2a4e14a4ec80fc7aad47520
 
 
 
-###################################################################################################################
+#####################################################################################################
 
 
 ## 2. Deploy a kubernetes cluster using Konvoy
@@ -298,10 +297,57 @@ There are many ways to deploy a kubernetes cluster from a fully manual procedure
 Change directories into the lab directory:
 
 ```
-mkdir ~/lab
 
 cd ~/lab
 ```
+
+Create your kubernetes cluster config files and validate files were created
+```bash
+konvoy init 
+
+ll
+```
+Note: `This command will create files required to build your cluster.`
+Output:
+```
+[centos@ip-10-0-1-61 lab]$ konvoy init
+
+Created configuration file successfully!
+[centos@ip-10-0-1-61 lab]$ ll
+total 16
+-rw-r--r-- 1 centos centos 4275 Jul 13 16:25 cluster.yaml
+-rw------- 1 centos centos 3247 Jul 13 16:25 lab-ssh.pem
+-rw------- 1 centos centos  725 Jul 13 16:25 lab-ssh.pub```
+
+
+Modify the name and tag your cluster with your name and add expiration tag. Notice line 17 & 18 in the sample below
+```bash
+vim cluster.yaml
+```
+sample:
+```
+
+  1 kind: ClusterProvisioner
+  2 apiVersion: konvoy.mesosphere.io/v1beta1
+  3 metadata:
+  4   name: lab
+  5   creationTimestamp: "2020-07-13T16:25:33Z"
+  6 spec:
+  7   provider: aws
+  8   aws:
+  9     region: us-west-2
+ 10     vpc:
+ 11       overrideDefaultRouteTable: true
+ 12       enableInternetGateway: true
+ 13       enableVPCEndpoints: false
+ 14     availabilityZones:
+ 15     - us-west-2c
+ 16     tags:
+ 17       owner: sagar malla
+ 18       expiration: 100h
+ ```
+
+
 
 Deploy your cluster using the command below:
 
@@ -360,7 +406,7 @@ If the cluster was recently created, the dashboard and services may take a few m
 If you get any error during the deployment of the addons (it can happen with network connectivity issues), then, you can run the following command to redeploy them:
 
 ```
-konvoy deploy addons --yes
+konvoy deploy addons --yes 
 ```
 
 As soon as your cluster is successfully deployed, the URL and the credentials to access your cluster are displayed. When you lauch your dashboard URL in your browser the first screen will ask you to select "login or generate token", select login and use the credentials provided.
@@ -402,6 +448,12 @@ ip-10-0-194-21.us-west-2.compute.internal    Ready    master   13m   v1.15.2
 
 
 ## 3. Pod Lifecycle Lab
+
+A Pod is the basic execution unit of a Kubernetes application--the smallest and simplest unit in the Kubernetes object model that you create or deploy. A Pod represents processes running on your cluster.
+
+A Pod encapsulates an application's container (or, in some cases, multiple containers), storage resources, a unique network identity (IP address), as well as options that govern how the container(s) should run. A Pod represents a unit of deployment: a single instance of an application in Kubernetes, which might consist of either a single container or a small number of containers that are tightly coupled and that share resources.
+
+#### Deploying and working with a kubernetes pod
 
 1. Create a Pod specification file.
 ```bash
@@ -540,11 +592,13 @@ my-app       LoadBalancer   10.0.48.46   abb741257ed124e13a5299376818d141-208811
 ```
 7. Copy the External-IP endpoint and paste it in a browser to access the application 
 
+8. Clean up: Delete the service and deployment
+```bash
+kubectl delete service my-app && kubectl delete deployment my-app
+``` 
 
 
-
-
-## 5. Application Lifecycle Management Lab
+## 5. Deployment Lifecycle Management Lab
 
 1. Create the Deployment by running the following command:
 ```bash
@@ -633,10 +687,12 @@ nginx-deployment-5d66cc795f-qnz5h   0/1     Terminating   0          6m52s
 ```bash
 kubectl scale deployment.v1.apps/nginx-deployment --replicas=10
 ```
+7. Clean up: Delete the deployment
+```bash
+kubectl delete deployment nginx-deployment
+``` 
 
-
-
-## 4. Scale a k8s Application using HPA
+## 6. Scale a k8s Application using HPA
 The following command will create a Horizontal Pod Autoscaler that maintains between 1 and 10 replicas of the Pods controlled by the PHP-apache deployment we created in the first step of these instructions. Roughly speaking, HPA will increase and decrease the number of replicas (via the deployment) to maintain an average CPU utilization across all Pods of 50% (since each pod requests 200 milli-cores by kubectl run, this means average CPU usage of 100 milli-cores).
 
 Create HPA namespace
