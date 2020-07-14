@@ -280,8 +280,6 @@ latest: digest: sha256:feeb5b6e53eca6519fbbe3419be5d51aec2a4e14a4ec80fc7aad47520
 6. Go to the Docker-hub website login and validate that your image exists and verify the last updated time. 
 
 
-
-
 ## 2. Deploy a kubernetes cluster using Konvoy
 
 ### Objectives
@@ -600,6 +598,7 @@ spec:
         - containerPort: 80
 EOF
 ```
+
 2. Copy your own my-app image name from dockerhub and update the image name feild in the Deployment file above. 
 ```bash
 vim nginx-deployment.yaml
@@ -638,7 +637,7 @@ service/my-app exposed
 ```
 Note: Give it a couple of minutes AWS takes a few minutes to provision a new Loadbalancer
 
-6. Review your serice endoint information. 
+6. Review your service endoint information. 
 ```bash
 kubectl get service 
 ```
@@ -650,8 +649,39 @@ kubernetes   ClusterIP      10.0.0.1     <none>                                 
 my-app       LoadBalancer   10.0.48.46   abb741257ed124e13a5299376818d141-2088114177.us-west-2.elb.amazonaws.com   80:31828/TCP   4m21s
 ```
 7. Copy the External-IP endpoint and paste it in a browser to access the application 
+`Note: you should see your custom nodejs app in a few minutes`
 
-8. Clean up: Delete the service and deployment
+8. list of pods for the application and delete one of them at random  
+```bash
+kubectl get pods -l app=my-app -o wide
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 test]$ kubectl get pods -l app=my-app -o wide
+NAME                      READY   STATUS    RESTARTS   AGE     IP                NODE                                         NOMINATED NODE   READINESS GATES
+my-app-74bb847669-cz6mh   1/1     Running   0          9m38s   192.168.78.89     ip-10-0-128-192.us-west-2.compute.internal   <none>           <none>
+my-app-74bb847669-sppvx   1/1     Running   0          9m38s   192.168.184.221   ip-10-0-131-172.us-west-2.compute.internal   <none>           <none>
+my-app-74bb847669-tt7d7   1/1     Running   0          9m38s   192.168.196.155   ip-10-0-130-113.us-west-2.compute.internal   <none>           <none>
+```
+
+9. Delete one of the pods and notice that deployment object would recreate a new one immediately.
+```bash
+kubectl delete pod <pod-name> 
+```
+10. List the pods once more to validate if the new pod is spun up 
+```bash
+kubectl get pods -l app=my-app -o wide
+```
+Output:
+```bash
+[centos@ip-10-0-1-198 test]$ kubectl get pods -l app=my-app -o wide
+NAME                      READY   STATUS    RESTARTS   AGE     IP                NODE                                         NOMINATED NODE   READINESS GATES
+my-app-74bb847669-zameh   1/1     Running   0          9s      192.168.78.89     ip-10-0-128-192.us-west-2.compute.internal   <none>           <none>
+my-app-74bb847669-sppvx   1/1     Running   0          9m38s   192.168.184.221   ip-10-0-131-172.us-west-2.compute.internal   <none>           <none>
+my-app-74bb847669-tt7d7   1/1     Running   0          9m38s   192.168.196.155   ip-10-0-130-113.us-west-2.compute.internal   <none>           <none>
+```
+
+11. Clean up: Delete the service and deployment
 ```bash
 kubectl delete service my-app && kubectl delete deployment my-app
 ``` 
