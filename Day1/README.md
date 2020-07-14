@@ -18,7 +18,7 @@ During this workshop, you'll learn about docker containers,  Kuberenetes and its
 
 1. You need either a Linux, MacOS or a Windows laptop.
 2. Open the excel sheet and find out your `student-id` and `workstation-ip`
-3. Download the key file with named after your student-id. 
+3. Download the key file named after your student-id. 
 
 ## Jumpserver
 
