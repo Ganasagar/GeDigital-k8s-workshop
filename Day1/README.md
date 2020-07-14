@@ -49,7 +49,17 @@ chmod 400 id_rsa_student#
 ```
 ssh -i id_rsa_student# centos@jumpserver-ip-address
 ```
+Putty users 
 
+1. Log in to PuTTY by using your SSH private key
+2. Use the following steps to log in to PuTTY by using your SSH private key:
+3. Specify the IP address of your assigned jumpserver then enter a name for the session and click Save.
+4. Click Connection > Data in the left navigation pane and set the Auto-login username to "centos".
+5. Click Connection > SSH > Auth in the left navigation pane and configure the SSH private key to use by clicking Browse under Private key file for authentication.
+6. Navigate to the location where you saved your SSH private key file, select the file, and click Open.
+7. The file path for the SSH private key file now displays in the Private key file for authentication field.
+8. Click Session in the left navigation pane, then click Save in the Load, save or delete a stored session section.
+9. Click Open to begin your session with the server.
 
 ## 1. Docker  Containerization Lab
 
