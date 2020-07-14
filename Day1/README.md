@@ -2,17 +2,17 @@
 
 ## Introduction
 
-During this workshop, you'll learn how to deploy Kuberenetes using Konvoy and to use its main features:
+During this workshop, you'll learn about docker containers,  Kuberenetes and its main features:
 
 * [Introduction](#introduction)
 * [Prerequisites](#prerequisites)
-* [1. Deploy a Kubernetes cluster using Konvoy](#Deploy-a-Kubernetes-cluster-using-Konvoy)
-* [2. Deploy a Custom Resource Definition](#Deploy-a-Custom-Resource-Definition)
-* [3. Scale Masters/Workers of a k8s cluster](#Scale-Masters/Workers-of-a-k8s-cluster)
-* [4. Scale a K8s Application using HPA](#Scale-a-k8s-Application-using-HPA)
-* [5. Konvoy logging/debugging](#konvoy-loggingdebugging)
-* [5. Ingress troubleshooting](#Ingress-trroubleshooting)
-* [6. Upgrade a Kubernetes cluster using Konvoy](#Upgrade-a-kubernetes-cluster-using-Konvoy)
+* [1. Docker Containerization ](#)
+* [2. Deploy a Kubernetes cluster using Konvoy](#Deploy-a-Kubernetes-cluster-using-Konvoy)
+* [3. Pod Lifecycle Lab](#)
+* [4. Deploying a containerized application in Kubernetes](#)
+* [5. Deployment Lifecycle Management Lab](#)
+* [5. Scheduling workloads using labels Lab ](#)
+* [6. Scale a k8s Application using HPA](#)
 
 ## Prerequisites
 
@@ -280,8 +280,6 @@ latest: digest: sha256:feeb5b6e53eca6519fbbe3419be5d51aec2a4e14a4ec80fc7aad47520
 6. Go to the Docker-hub website login and validate that your image exists and verify the last updated time. 
 
 
-
-#####################################################################################################
 
 
 ## 2. Deploy a kubernetes cluster using Konvoy
@@ -753,7 +751,7 @@ kubectl scale deployment.v1.apps/nginx-deployment --replicas=10
 kubectl delete deployment nginx-deployment
 ``` 
 
-## 6. Scheduling LAB 
+## 6. Scheduling workloads using labels Lab 
 Labels are key/value pairs that are attached to objects, such as pods. Labels are intended to be used to specify identifying attributes of objects that are meaningful and relevant to users, but do not directly imply semantics to the core system. Labels can be used to organize and to select subsets of objects. Labels can be attached to objects at creation time and subsequently added and modified at any time. Each object can have a set of key/value labels defined. Each Key must be unique for a given object.
 
 1. Create a deployment file with a label selector
