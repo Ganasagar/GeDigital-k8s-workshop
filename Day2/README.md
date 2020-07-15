@@ -7,12 +7,12 @@ During this training, you'll learn how to deploy Konvoy and to use its main feat
 * [Introduction](#introduction)
 * [Prerequisites](#prerequisites)
 * [1. Deploy a Konvoy cluster](#deploy-a-konvoy-cluster)
-* [2. StatefulSets](#StatefulSets)
-* [3. Leverage persistent storage using CSI](#leverage-persistent-storage-using-csi)
-* [4. Deploy portworx for persistent storage](#deploy-portworx)
+* [2. Leverage persistent storage using CSI](#)
+* [3. StatefulSets](#StatefulSets)
+* [4. Role Based Access Control (RBAC)](#)
 * [5. Deploy Jenkins using Helm](#deploy-jenkins-using-helm)
-* [6. Deploy Apache Kafka using KUDO](#deploy-apache-kafka-using-kudo)
-* [7. Moniotoring applications using Grafana](#Moniotoring-applications-using-Grafana)
+* [6. Logging and debugging](#)
+
 
 
 ## Prerequisites
