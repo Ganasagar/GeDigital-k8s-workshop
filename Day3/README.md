@@ -9,10 +9,11 @@ During this training, you'll learn how to deploy Konvoy and to use its main feat
 * [1. Do a Health check the k8s cluster](#1-deploy-a-konvoy-cluster)
 * [2. Expose a Kubernetes Application using a Service Type Load Balancer (L4)](#2-expose-a-kubernetes-application-using-a-service-type-load-balancer-l4)
 * [3. Expose a Kubernetes Application using an Ingress (L7)](#3-expose-a-kubernetes-application-using-an-ingress-l7)
-* [4. Leverage Network Policies to restrict access](#4-leverage-network-policies-to-restrict-access)
-* [5. Deploy Istio on Konvoy](#5-Deploy-Istio-on-Konvoy)
-* [6. Deploy Bookinfo Application](#6-Deploy-Bookinfo-Application)
-* [7. Istio-Traffic-Management](#7-Istio-traffic-management)
+* [4. Routing an application using paths](#4)
+* [5. Leverage Network Policies to restrict access](#5-leverage-network-policies-to-restrict-access)
+* [6. Deploy Istio on Konvoy](#5-Deploy-Istio-on-Konvoy)
+* [7. Deploy Bookinfo Application](#6-Deploy-Bookinfo-Application)
+* [8. Istio-Traffic-Management](#7-Istio-traffic-management)
 
 
 ## Prerequisites
@@ -217,14 +218,14 @@ Finally, run the following command to see the URL of the Load Balancer created o
 
 ```bash
 kubectl get svc redis
-```
+
 The output should be similar to:
 ```bash
 NAME    TYPE           CLUSTER-IP   EXTERNAL-IP                                                               PORT(S)          AGE
 redis   LoadBalancer   10.0.51.32   a92b6c9216ccc11e982140acb7ee21b7-1453813785.us-west-2.elb.amazonaws.com   6379:31423/TCP   43s
 ```
 
-You need to wait for a few minutes while the Load Balancer is created on AWS and the name resolution in place. 
+You need to wait for a few minutes while the Load Balancer is created on AWS and the name resolution in place.
 
 ```bash
 until nslookup $(kubectl get svc redis --output jsonpath={.status.loadBalancer.ingress[*].hostname})
@@ -233,7 +234,7 @@ do
 done
 ```
 
-You can validate that you can access the redis Pod from your laptop using telnet once done you can enter `quit` like below to exit out:
+You can validate that you can access the redis Pod from your laptop using telnet:
 
 ```bash
 telnet $(kubectl get svc redis --output jsonpath={.status.loadBalancer.ingress[*].hostname}) 6379
@@ -317,7 +318,114 @@ curl -k -H "Host: http-echo-2.com" https://$(kubectl get svc traefik-kubeaddons 
 
 You can also set some Traefik annotations to use some advanced features as described in this [document](https://docs.traefik.io/providers/kubernetes-crd/).
 
-## 4. Leverage Network Policies to restrict access
+## 4. Route an application using path based routing and CLI ingress test
+
+1. Create sample apple app an expose it as internal service
+```bash
+cat <<EOF | kubectl create -f -
+kind: Pod
+apiVersion: v1
+metadata:
+  name: apple-app
+  labels:
+    app: apple
+spec:
+  containers:
+    - name: apple-app
+      image: hashicorp/http-echo
+      args:
+        - "-text=apple"
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: apple-service
+spec:
+  selector:
+    app: apple
+  ports:
+    - port: 5678 # Default port for image
+EOF
+```
+
+2. Create sample banana app an expose it as internal service
+```bash
+cat <<EOF | kubectl create -f -
+kind: Pod
+apiVersion: v1
+metadata:
+  name: banana-app
+  labels:
+    app: banana
+spec:
+  containers:
+    - name: banana-app
+      image: hashicorp/http-echo
+      args:
+        - "-text=banana"
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: banana-service
+spec:
+  selector:
+    app: banana
+  ports:
+    - port: 5678 # Default port for image
+EOF
+```
+
+3. Create an ingress-object to route traffic between both different application paths.
+```bash
+cat <<EOF | kubectl create -f -
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: example-ingress
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - http:
+      paths:
+        - path: /apple
+          backend:
+            serviceName: apple-service
+            servicePort: 5678
+        - path: /banana
+          backend:
+            serviceName: banana-service
+            servicePort: 5678
+EOF
+```
+
+4. Test if you can hit the apple and banana applications from a single laodbalancer endpoint. we already have trafik ingress controller running so lets use that endpoint 
+
+```bash
+curl -k https://$(kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}")/apple
+```
+Output:
+```
+[centos@ip-10-0-1-61 ~]$ curl -k https://$(kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}")/apple
+apple
+```
+
+```bash
+curl -k https://$(kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}")/banana
+```
+Output:
+```
+[centos@ip-10-0-1-61 ~]$ curl -k https://$(kubectl get svc traefik-kubeaddons -n kubeaddons --output jsonpath="{.status.loadBalancer.ingress[*].hostname}")/banana
+banana
+```
+
+
+## 5. Leverage Network Policies to restrict access
 
 By default, all the pods can access all the services inside and outside the Kubernetes clusters and services exposed to the external world can be accessed by anyone. Kubernetes Network Policies can be used to restrict access.
 
@@ -429,7 +537,7 @@ spec:
 EOF
 ```
 
-# 5. Deploy Istio using Konvoy
+# 6. Deploy Istio using Konvoy
 
 Cloud platforms provide a wealth of benefits for the organizations that use them.
 There’s no denying, however, that adopting the cloud can put strains on DevOps teams.
@@ -532,7 +640,7 @@ NAME                                                   CDS        LDS        EDS
 istio-ingressgateway-6db99c76dc-zqb2s.istio-system     SYNCED     SYNCED     SYNCED     NOT SENT     istio-pilot-7684976f67-vxgbc     1.3.3
 ```
 
-## 6. Deploy Bookinfo Application 
+## 7. Deploy Bookinfo Application 
 
 ```
 This example deploys a sample application composed of four separate microservices used to demonstrate various Istio features.
@@ -542,107 +650,21 @@ Displayed on the page is a description of the book, book details (ISBN, number o
 #### Download the Istio-repo
 Go to the Istio release page to download the installation file corresponding to your OS. Alternatively, on a macOS or Linux system, you can run the following command to download and extract the latest release automatically:
 
-
-
-Go to home directory and Run the following commands to download Istio artifacts needed for the lab:
+Run the following commands to deploy the bookinfo application:
 ```bash
-cd ~
-
-curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.4.3 sh -
+curl -L https://istio.io/downloadIstio | sh -
 ```
- 
 
-Install istioctl to your path
+Move into the Istio directory 
 ```bash
-export PATH="$PATH:/home/centos/istio-1.4.3/istio-1.4.3/bin"
+cd istio-1.4.0
 ```
-Validate if you can run istioctl commands 
+The default Istio installation uses automatic sidecar injection. Label the namespace that will host the application with istio-injection=enabled:
 ```bash
-istioctl --help
+kubectl label namespace default istio-injection=enabled 
+
+kubectl label namespace default ca.istio.io/override=true
 ```
-Output:
-```
-[centos@ip-10-0-1-191 istio-1.6.4]$ istioctl --help
-Istio configuration command line utility for service operators to
-debug and diagnose their Istio mesh.
-
-Usage:
-  istioctl [command]
-
-Available Commands:
-  analyze         Analyze Istio configuration and print validation messages
-  authz           (authz is experimental. Use `istioctl experimental authz`)
-  convert-ingress Convert Ingress configuration into Istio VirtualService configuration
-  dashboard       Access to Istio web UIs
-  deregister      De-registers a service instance
-  experimental    Experimental commands that may be modified or deprecated
-  help            Help about any command
-  install         Applies an Istio manifest, installing or reconfiguring Istio on a cluster.
-  kube-inject     Inject Envoy sidecar into Kubernetes pod resources
-  manifest        Commands related to Istio manifests
-  operator        Commands related to Istio operator controller.
-  profile         Commands related to Istio configuration profiles
-  proxy-config    Retrieve information about proxy configuration from Envoy [kube only]
-  proxy-status    Retrieves the synchronization status of each Envoy in the mesh [kube only]
-  register        Registers a service instance (e.g. VM) joining the mesh
-  upgrade         Upgrade Istio control plane in-place
-  validate        Validate Istio policy and rules (NOTE: validate is deprecated and will be removed in 1.6. Use 'istioctl analyze' to validate configuration.)
-  verify-install  Verifies Istio Installation Status or performs pre-check for the cluster before Istio installation
-  version         Prints out build version information
-
-Flags:
-      --context string          The name of the kubeconfig context to use
-  -h, --help                    help for istioctl
-  -i, --istioNamespace string   Istio system namespace (default "istio-system")
-  -c, --kubeconfig string       Kubernetes configuration file
-  -n, --namespace string        Config namespace
-
-Additional help topics:
-  istioctl options         Displays istioctl global options
-
-Use "istioctl [command] --help" for more information about a command.
-```
-
-
-#### Create a new namespace for Istio and enable side-car injection 
-
-The default Istio installation uses automatic sidecar injection. Create a new namespace and Label the namespace that will host the application with istio-injection=enabled:
-```bash
-kubectl create namespace istio-ns
-
-kubectl label namespace istio-ns istio-injection=enabled 
-
-kubectl label namespace istio-ns ca.istio.io/override=true
-```
-
-List all namespace and switch namespaces using `kubens` tools
-
-```bash
-kubens 
-
-kubens istio-ns
-```
-output should be something like below 
-```bash
-[centos@ip-10-0-1-191 istio-1.6.4]$ kubens
-cert-manager
-default
-default-workspace-vmq2p
-istio-ns
-istio-system
-kommander
-kommander-system
-kube-node-lease
-kube-public
-kube-system
-kubeaddons
-velero
-velero-minio-operator
-[centos@ip-10-0-1-191 istio-1.6.4]$ kubens istio-ns
-Context "gabbar-k8s-cluster-admin@gabbar-k8s-cluster" modified.
-Active namespace is "istio-ns".
-```
-
 Deploy your application using the kubectl command:
 ```bash
 kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml
@@ -651,17 +673,17 @@ The command launches all four services shown in the bookinfo application archite
 
 Confirm all services and pods are correctly defined and running:
 ```bash
-kubectl get services,pods
-```
-Output:
-```
+kubectl get services
 NAME                       CLUSTER-IP   EXTERNAL-IP   PORT(S)              AGE
 details                    10.0.0.31    <none>        9080/TCP             6m
 kubernetes                 10.0.0.1     <none>        443/TCP              7d
 productpage                10.0.0.120   <none>        9080/TCP             6m
 ratings                    10.0.0.15    <none>        9080/TCP             6m
 reviews                    10.0.0.170   <none>        9080/TCP             6m
-
+```
+and
+```bash
+kubectl get pods
 NAME                                        READY     STATUS    RESTARTS   AGE
 details-v1-1520924117-48z17                 2/2       Running   0          6m
 productpage-v1-560495357-jk1lz              2/2       Running   0          6m
@@ -712,10 +734,7 @@ Note: This deploys a Gateway + Virtual service to establish a route to the booki
 
 Confirm the gateway & virtual service has been created:
 ```bash
-kubectl get vs,gw
-```
-Output:
-```
+k get vs,gw
 NAME                                          GATEWAYS             HOSTS   AGE
 virtualservice.networking.istio.io/bookinfo   [bookinfo-gateway]   [*]     41m
 
@@ -733,13 +752,10 @@ curl -s http://${GATEWAY_URL}/productpage | grep -o "<title>.*</title>"
 To confirm that the Bookinfo application is accessible from outside the cluster, using browser do the following steps:
 ```bash
 kubectl get svc istio-ingressgateway -n istio-system
-```
-Output:
-```
+
 NAME                   TYPE           CLUSTER-IP    EXTERNAL-IP                                                               PORT(S)                                                                                                                                      AGE
 istio-ingressgateway   LoadBalancer   10.0.11.122   a32c15819094e4a14a920331501f12b0-1882016049.us-west-2.elb.amazonaws.com   15020:30405/TCP,80:31380/TCP,443:31390/TCP,31400:31400/TCP,15029:30912/TCP,15030:31276/TCP,15031:31143/TCP,15032:32426/TCP,15443:30178/TCP   42h
 ```
-
 In your browser run hit the AWS-ELB endpoint with path for Bookinfo application like below:
 
 http://a32c15819094e4a14a920331501f12b0-1882016049.us-west-2.elb.amazonaws.com/productpage
@@ -748,9 +764,8 @@ http://a32c15819094e4a14a920331501f12b0-1882016049.us-west-2.elb.amazonaws.com/p
 ![Istio](../images/istio.png)
 
 
-NOTE: `PROCEED WITH NEXT SECTION ONLY IF YOU ARE DONE WITH WORKSHOP`
 
-## 8. Destroy a Konvoy cluster (Only if you are not done with the workshop)
+## 8. Destroy a Konvoy cluster
 
 When you run konvoy down, the command removes all of the AWS infrastructure resources create for the cluster, including any volumes that are backing PersistentVolumesClaims with a Delete ReclaimPolicy.
 
